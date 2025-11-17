@@ -1,0 +1,425 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────
+   DESIGN TOKENS
+   change these to quickly re-skin the entire CRM
+   ─────────────────────────────────────────────────────────── */
+:root {
+  /* brand (violet / indigo, SaaS-y look) */
+  --primary-50:  #f4f3ff;
+  --primary-100: #e4e2ff;
+  --primary-200: #c8c5ff;
+  --primary-300: #a6a1ff;
+  --primary-400: #857cff;
+  --primary-500: #6b5bff;
+  --primary-600: #4d3dff;   /* main primary */
+  --primary-700: #3b30e0;
+  --primary-800: #2a24b0;
+  --primary-900: #211c83;
+
+  /* neutrals (slate / zinc blend) */
+  --gray-50:  #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d4d4d8;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2933;
+  --gray-900: #0b1120;
+
+  /* semantic */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger:  #ef4444;
+  --info:    #0ea5e9;
+
+  /* surface tokens */
+  --bg:        #f5f6fb;                /* page background */
+  --fg:        #020617;
+  --muted:     var(--gray-500);
+  --card:      #ffffff;
+  --card-2:    #f9fafb;
+  --border:    rgba(15, 23, 42, 0.08);
+  --ring:      var(--primary-600);
+
+  /* shapes & shadows */
+  --radius-xs: 0.425rem;
+  --radius-sm: 0.55rem;
+  --radius-md: 0.9rem;
+  --radius-lg: 1.25rem;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 16px 40px rgba(15, 23, 42, 0.10);
+
+  /* typography */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text",
+    Segoe UI, Roboto, Inter, "Noto Sans", "Helvetica Neue", Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+}
+
+/* optional dark theme: add .theme-dark on <html> */
+.theme-dark {
+  --bg:       #020617;
+  --fg:       #e5e7eb;
+  --muted:    #9ca3af;
+  --card:     #020617;
+  --card-2:   #020617;
+  --border:   rgba(148, 163, 184, 0.4);
+  --ring:     var(--primary-400);
+
+  --gray-50:  #020617;
+  --gray-100: #020617;
+  --gray-200: #020617;
+  --gray-300: #111827;
+  --gray-400: #1f2937;
+  --gray-500: #6b7280;
+  --gray-600: #9ca3af;
+  --gray-700: #e5e7eb;
+  --gray-800: #f3f4f6;
+  --gray-900: #f9fafb;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.7);
+  --shadow-md: 0 18px 40px rgba(15, 23, 42, 0.9);
+}
+
+/* Tailwind v4 token bridge (so you can use text-foreground, bg-background) */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-primary: var(--primary-600);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius: var(--radius-sm);
+}
+
+/* ───────────────────────────────────────────────────────────
+   BASE
+   ─────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(93, 76, 255, 0.08), transparent 55%),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 55%),
+    var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  accent-color: var(--ring);
+}
+
+/* nicer scrollbars to match dashboard feel */
+body::-webkit-scrollbar {
+  width: 8px;
+}
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+body::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.7);
+  border-radius: 999px;
+}
+body::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.95);
+}
+
+a {
+  color: var(--primary-600);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: calc(var(--radius-xs) + 2px);
+}
+
+/* generic shell helpers for your CRM layout */
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0;
+  background: transparent;
+}
+
+.app-main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.75rem 1.75rem;
+  gap: 1.25rem;
+}
+
+/* ───────────────────────────────────────────────────────────
+   REUSABLE PRIMITIVES – keep using Tailwind + these helpers
+   ─────────────────────────────────────────────────────────── */
+
+/* cards */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+  position: relative;
+}
+
+.card-elevated {
+  box-shadow: var(--shadow-md);
+}
+
+.card-gradient {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  color: #fff;
+  border: 0;
+}
+
+/* section helper (for larger blocks) */
+.section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+/* buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 80ms ease-out,
+    box-shadow 120ms ease-out,
+    background-color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+.btn:hover {
+  background: var(--gray-50);
+  border-color: rgba(148, 163, 184, 0.8);
+  text-decoration: none;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+.btn:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-color: transparent;
+  color: #fff;
+}
+.btn-primary:hover {
+  filter: brightness(1.02);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+}
+
+/* inputs */
+:where(input, select, textarea) {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.875rem;
+}
+:where(textarea) {
+  border-radius: var(--radius-sm);
+  min-height: 120px;
+}
+:where(input, select, textarea)::placeholder {
+  color: var(--gray-400);
+}
+:where(input, select, textarea):focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* field label / stack */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.field-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* chips & badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.6rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+.badge-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+}
+.badge.success {
+  background: color-mix(in oklab, var(--success), white 83%);
+  color: var(--success);
+}
+.badge.warn {
+  background: color-mix(in oklab, var(--warning), white 83%);
+  color: var(--warning);
+}
+.badge.danger {
+  background: color-mix(in oklab, var(--danger), white 83%);
+  color: var(--danger);
+}
+.badge.info {
+  background: color-mix(in oklab, var(--info), white 83%);
+  color: var(--info);
+}
+
+/* table styles – used in lists, invoices, etc. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.table thead th {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.table tbody td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+.table tr:last-child td {
+  border-bottom: 0;
+}
+.table tbody tr:hover td {
+  background: color-mix(in oklab, var(--card), var(--primary-600) 3%);
+}
+
+/* helper utilities */
+.hr {
+  height: 1px;
+  background: var(--border);
+}
+.shadow-card {
+  box-shadow: var(--shadow-md);
+}
+.round-md {
+  border-radius: var(--radius-md);
+}
+
+/* header & sidebar base – themed via tokens */
+header {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+aside {
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+}
+
+/* ───────────────────────────────────────────────────────────
+   PRINT – invoice pages
+   ─────────────────────────────────────────────────────────── */
+@media print {
+  aside,
+  nav,
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .invoice-print,
+  .invoice-print * {
+    visibility: visible;
+  }
+
+  .invoice-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    box-shadow: none;
+    border: 0;
+  }
+}
