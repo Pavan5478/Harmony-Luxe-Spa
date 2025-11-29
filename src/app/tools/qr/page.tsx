@@ -23,7 +23,7 @@ export default function QRTool() {
   }, []);
 
   const title = useMemo(
-    () => (to.includes("/menu/public") ? "Scan for Menu" : "Scan Me"),
+    () => (to.includes("/menu/public") ? "Scan for menu" : "Scan me"),
     [to]
   );
 
@@ -36,13 +36,14 @@ export default function QRTool() {
 
   function download() {
     const canvas =
-      (linkRef.current?.querySelector("canvas") as HTMLCanvasElement | null) ??
-      null;
+      (linkRef.current?.querySelector(
+        "canvas"
+      ) as HTMLCanvasElement | null) ?? null;
     if (!canvas) return;
     const url = canvas.toDataURL("image/png");
     const a = document.createElement("a");
     a.href = url;
-    a.download = "qr.png";
+    a.download = "menu-qr.png";
     a.click();
   }
 
@@ -58,18 +59,19 @@ export default function QRTool() {
               Tools
             </p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-              QR Generator
+              Menu QR generator
             </h1>
             <p className="mt-1 text-xs text-muted sm:text-sm">
-              Create printable QR codes for your public menu or any custom
-              link.
+              Generate a QR code that opens the{" "}
+              <span className="font-medium">public mobile menu</span>; perfect
+              for reception, rooms and table displays.
             </p>
           </div>
 
           <div className="rounded-xl bg-background px-3 py-2 text-[11px] text-muted">
-            <div className="font-medium text-foreground">Common link</div>
+            <div className="font-medium text-foreground">Default menu link</div>
             <div className="mt-1">
-              <span className="block font-mono text-[10px] break-all">
+              <span className="block break-all font-mono text-[10px]">
                 {menuUrl}
               </span>
               <span className="text-[10px]">Customer-facing menu</span>
@@ -102,7 +104,7 @@ export default function QRTool() {
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
             <span className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-1">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              PNG export for print
+              High-resolution PNG export
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-1">
               Best on light backgrounds
@@ -129,7 +131,7 @@ export default function QRTool() {
               className="no-print inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background"
               onClick={() => window.print()}
             >
-              Print
+              Print QR
             </button>
             <button
               type="button"

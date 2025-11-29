@@ -6,13 +6,32 @@ import { loadBillsFromSheet, saveBillToSheet } from "@/lib/sheets";
 type AnyBill = BillDraft | BillFinal;
 
 // ─────────────────────────────
-// Internal helpers
+// Tiny in-memory cache (per server instance)
 // ─────────────────────────────
 
-// Always load fresh from Google Sheets so UI + reports stay in sync.
+const CACHE_MS = 10_000; // 10 seconds of reuse is enough for 1–user usage
+
+let billsCache:
+  | {
+      data: AnyBill[];
+      ts: number;
+    }
+  | null = null;
+
+function invalidateCache() {
+  billsCache = null;
+}
+
 async function loadAll(): Promise<AnyBill[]> {
+  const now = Date.now();
+  if (billsCache && now - billsCache.ts < CACHE_MS) {
+    return billsCache.data;
+  }
+
   const rows = await loadBillsFromSheet();
-  return rows as AnyBill[];
+  const data = rows as AnyBill[];
+  billsCache = { data, ts: now };
+  return data;
 }
 
 function findIndex(all: AnyBill[], idOrNo: string): number {
@@ -68,8 +87,8 @@ export async function createDraft(
     createdAt: new Date().toISOString(),
   };
 
-  // Upsert into Invoices sheet (status DRAFT, no BillNo yet)
   await saveBillToSheet(draft);
+  invalidateCache();
   return draft;
 }
 
@@ -83,7 +102,9 @@ export async function finalizeDraft(
   const ix = all.findIndex(
     (b: any) => b.id === id && b.status === "DRAFT"
   );
-  if (ix === -1) throw new Error("Draft not found");
+  if (ix === -1) {
+    throw new Error("Draft not found");
+  }
 
   const base = all[ix] as any;
   const billNo = await nextBillNo();
@@ -96,8 +117,8 @@ export async function finalizeDraft(
     finalizedAt: new Date().toISOString(),
   };
 
-  // Upsert same row in Sheets as FINAL + BillNo
   await saveBillToSheet(fin);
+  invalidateCache();
   return fin;
 }
 
@@ -124,6 +145,7 @@ export async function updateBill(
 
   const updated = { ...original, ...patch, ...keep } as AnyBill;
   await saveBillToSheet(updated);
+  invalidateCache();
   return updated;
 }
 
@@ -141,6 +163,7 @@ export async function markPrinted(
   };
 
   await saveBillToSheet(updated);
+  invalidateCache();
   return updated as AnyBill;
 }
 
@@ -159,10 +182,12 @@ export async function voidBill(
   };
 
   await saveBillToSheet(updated);
+  invalidateCache();
   return updated as AnyBill;
 }
 
 // DEV helper – kept so old imports don't break
 export function clearBills() {
   // no-op in Sheets-backed version
+  invalidateCache();
 }

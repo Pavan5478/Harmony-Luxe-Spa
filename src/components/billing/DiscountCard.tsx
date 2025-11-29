@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/components/billing/DiscountCard.tsx
+"use client";
 
 export default function DiscountCard({
   value,
@@ -20,6 +21,8 @@ export default function DiscountCard({
             Flat (₹)
           </label>
           <input
+            type="number"
+            min={0}
             value={value.flat || ""}
             onChange={(e) =>
               onFlat(Number(e.target.value || 0))
@@ -33,6 +36,10 @@ export default function DiscountCard({
             Percentage (%)
           </label>
           <input
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
             value={value.pct || ""}
             onChange={(e) =>
               onPct(Number(e.target.value || 0))

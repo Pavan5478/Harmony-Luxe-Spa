@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/components/billing/CustomerCard.tsx
+"use client";
 
 import type { CustomerDraft } from "@/types/billing";
 
@@ -15,6 +16,7 @@ export default function CustomerCard({ value, onChange }: Props) {
       </h2>
       <div className="grid gap-3 md:grid-cols-3">
         <input
+          type="text"
           placeholder="Name"
           value={value.name ?? ""}
           onChange={(e) =>
@@ -23,6 +25,7 @@ export default function CustomerCard({ value, onChange }: Props) {
           className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <input
+          type="tel"
           placeholder="Phone"
           value={value.phone ?? ""}
           onChange={(e) =>
@@ -31,6 +34,7 @@ export default function CustomerCard({ value, onChange }: Props) {
           className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <input
+          type="email"
           placeholder="Email"
           value={value.email ?? ""}
           onChange={(e) =>

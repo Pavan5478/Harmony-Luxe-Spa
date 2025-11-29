@@ -2,22 +2,22 @@
 
 /* ───────────────────────────────────────────────────────────
    DESIGN TOKENS
-   change these to quickly re-skin the entire CRM
+   Gold + Black CRM theme
    ─────────────────────────────────────────────────────────── */
 :root {
-  /* brand (violet / indigo, SaaS-y look) */
-  --primary-50:  #f4f3ff;
-  --primary-100: #e4e2ff;
-  --primary-200: #c8c5ff;
-  --primary-300: #a6a1ff;
-  --primary-400: #857cff;
-  --primary-500: #6b5bff;
-  --primary-600: #4d3dff;   /* main primary */
-  --primary-700: #3b30e0;
-  --primary-800: #2a24b0;
-  --primary-900: #211c83;
+  /* primary – warm gold */
+  --primary-50:  #fff9e6;
+  --primary-100: #feefbf;
+  --primary-200: #fde28c;
+  --primary-300: #fbd45a;
+  --primary-400: #f2c340;
+  --primary-500: #e4ad24;
+  --primary-600: #c89212;  /* main primary */
+  --primary-700: #a5730c;
+  --primary-800: #82580a;
+  --primary-900: #5c3c07;
 
-  /* neutrals (slate / zinc blend) */
+  /* neutrals – near-black UI */
   --gray-50:  #f9fafb;
   --gray-100: #f3f4f6;
   --gray-200: #e5e7eb;
@@ -26,8 +26,8 @@
   --gray-500: #6b7280;
   --gray-600: #4b5563;
   --gray-700: #374151;
-  --gray-800: #1f2933;
-  --gray-900: #0b1120;
+  --gray-800: #111827;
+  --gray-900: #020617;
 
   /* semantic */
   --success: #22c55e;
@@ -35,14 +35,14 @@
   --danger:  #ef4444;
   --info:    #0ea5e9;
 
-  /* surface tokens */
-  --bg:        #f5f6fb;                /* page background */
-  --fg:        #020617;
-  --muted:     var(--gray-500);
-  --card:      #ffffff;
-  --card-2:    #f9fafb;
-  --border:    rgba(15, 23, 42, 0.08);
-  --ring:      var(--primary-600);
+  /* surfaces – dark shell, soft cards */
+  --bg:        #050509;                 /* app background */
+  --fg:        #f9fafb;
+  --muted:     #9ca3af;
+  --card:      #0b0b10;
+  --card-2:    #14141c;
+  --border:    rgba(248, 191, 64, 0.24);
+  --ring:      var(--primary-400);
 
   /* shapes & shadows */
   --radius-xs: 0.425rem;
@@ -50,8 +50,8 @@
   --radius-md: 0.9rem;
   --radius-lg: 1.25rem;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 16px 40px rgba(15, 23, 42, 0.10);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.8);
 
   /* typography */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text",
@@ -61,19 +61,19 @@
     "Liberation Mono", monospace;
 }
 
-/* optional dark theme: add .theme-dark on <html> */
+/* optional dark theme: keep but almost same */
 .theme-dark {
-  --bg:       #020617;
-  --fg:       #e5e7eb;
+  --bg:       #020307;
+  --fg:       #f9fafb;
   --muted:    #9ca3af;
-  --card:     #020617;
-  --card-2:   #020617;
-  --border:   rgba(148, 163, 184, 0.4);
+  --card:     #050509;
+  --card-2:   #0b0b10;
+  --border:   rgba(248, 191, 64, 0.32);
   --ring:     var(--primary-400);
 
-  --gray-50:  #020617;
-  --gray-100: #020617;
-  --gray-200: #020617;
+  --gray-50:  #050509;
+  --gray-100: #050509;
+  --gray-200: #0b0b10;
   --gray-300: #111827;
   --gray-400: #1f2937;
   --gray-500: #6b7280;
@@ -82,11 +82,11 @@
   --gray-800: #f3f4f6;
   --gray-900: #f9fafb;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.7);
-  --shadow-md: 0 18px 40px rgba(15, 23, 42, 0.9);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.95);
 }
 
-/* Tailwind v4 token bridge (so you can use text-foreground, bg-background) */
+/* Tailwind v4 token bridge */
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--fg);
@@ -122,8 +122,8 @@ body {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(93, 76, 255, 0.08), transparent 55%),
-    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 55%),
+    radial-gradient(circle at top left, rgba(248, 191, 64, 0.16), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(148, 163, 184, 0.12), transparent 60%),
     var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);
@@ -132,7 +132,7 @@ body {
   accent-color: var(--ring);
 }
 
-/* nicer scrollbars to match dashboard feel */
+/* scrollbars */
 body::-webkit-scrollbar {
   width: 8px;
 }
@@ -140,15 +140,15 @@ body::-webkit-scrollbar-track {
   background: transparent;
 }
 body::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.7);
+  background: rgba(148, 163, 184, 0.65);
   border-radius: 999px;
 }
 body::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.95);
+  background: rgba(209, 213, 219, 0.9);
 }
 
 a {
-  color: var(--primary-600);
+  color: var(--primary-400);
   text-decoration: none;
 }
 a:hover {
@@ -161,7 +161,7 @@ a:hover {
   border-radius: calc(var(--radius-xs) + 2px);
 }
 
-/* generic shell helpers for your CRM layout */
+/* shell */
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -179,7 +179,7 @@ a:hover {
 }
 
 /* ───────────────────────────────────────────────────────────
-   REUSABLE PRIMITIVES – keep using Tailwind + these helpers
+   PRIMITIVES
    ─────────────────────────────────────────────────────────── */
 
 /* cards */
@@ -198,13 +198,13 @@ a:hover {
 
 .card-gradient {
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.35), transparent 55%),
-    linear-gradient(135deg, var(--primary-500), var(--primary-600));
-  color: #fff;
-  border: 0;
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), transparent 55%),
+    linear-gradient(135deg, #262626, #0b0b0f);
+  color: #fefce8;
+  border: 1px solid rgba(248, 191, 64, 0.45);
 }
 
-/* section helper (for larger blocks) */
+/* section helper */
 .section {
   background: var(--card);
   border: 1px solid var(--border);
@@ -235,19 +235,19 @@ a:hover {
     border-color 140ms ease-out;
 }
 .btn:hover {
-  background: var(--gray-50);
-  border-color: rgba(148, 163, 184, 0.8);
+  background: #111827;
+  border-color: rgba(248, 191, 64, 0.55);
   text-decoration: none;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
 }
 .btn:active {
   transform: translateY(1px) scale(0.99);
   box-shadow: var(--shadow-sm);
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
-  border-color: transparent;
-  color: #fff;
+  background: radial-gradient(circle at top left, #facc15, #eab308);
+  border-color: rgba(250, 204, 21, 0.9);
+  color: #111827;
 }
 .btn-primary:hover {
   filter: brightness(1.02);
@@ -270,9 +270,9 @@ a:hover {
 
 /* inputs */
 :where(input, select, textarea) {
-  background: var(--card);
+  background: #050509;
   color: var(--fg);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 999px;
   padding: 0.55rem 0.9rem;
   box-shadow: var(--shadow-sm);
@@ -283,14 +283,14 @@ a:hover {
   min-height: 120px;
 }
 :where(input, select, textarea)::placeholder {
-  color: var(--gray-400);
+  color: var(--gray-500);
 }
 :where(input, select, textarea):focus {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/* field label / stack */
+/* field helpers */
 .field {
   display: flex;
   flex-direction: column;
@@ -302,7 +302,7 @@ a:hover {
   color: var(--muted);
 }
 
-/* chips & badges */
+/* badges */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -312,8 +312,8 @@ a:hover {
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 500;
-  background: var(--gray-100);
-  color: var(--gray-700);
+  background: #111827;
+  color: #e5e7eb;
 }
 .badge-dot {
   width: 0.5rem;
@@ -321,23 +321,23 @@ a:hover {
   border-radius: 999px;
 }
 .badge.success {
-  background: color-mix(in oklab, var(--success), white 83%);
-  color: var(--success);
+  background: color-mix(in oklab, var(--success), black 70%);
+  color: #bbf7d0;
 }
 .badge.warn {
-  background: color-mix(in oklab, var(--warning), white 83%);
-  color: var(--warning);
+  background: color-mix(in oklab, var(--warning), black 70%);
+  color: #fed7aa;
 }
 .badge.danger {
-  background: color-mix(in oklab, var(--danger), white 83%);
-  color: var(--danger);
+  background: color-mix(in oklab, var(--danger), black 70%);
+  color: #fecaca;
 }
 .badge.info {
-  background: color-mix(in oklab, var(--info), white 83%);
-  color: var(--info);
+  background: color-mix(in oklab, var(--info), black 70%);
+  color: #bae6fd;
 }
 
-/* table styles – used in lists, invoices, etc. */
+/* tables */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -347,22 +347,22 @@ a:hover {
   text-align: left;
   font-weight: 600;
   padding: 0.7rem 0.75rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
   color: var(--muted);
   font-size: 0.8rem;
 }
 .table tbody td {
   padding: 0.7rem 0.75rem;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  border-bottom: 1px solid rgba(31, 41, 55, 0.7);
 }
 .table tr:last-child td {
   border-bottom: 0;
 }
 .table tbody tr:hover td {
-  background: color-mix(in oklab, var(--card), var(--primary-600) 3%);
+  background: #020617;
 }
 
-/* helper utilities */
+/* misc helpers */
 .hr {
   height: 1px;
   background: var(--border);
@@ -374,52 +374,89 @@ a:hover {
   border-radius: var(--radius-md);
 }
 
-/* header & sidebar base – themed via tokens */
+/* header & sidebar */
 header {
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+  background: rgba(5, 5, 9, 0.94);
+  border-bottom: 1px solid rgba(248, 191, 64, 0.16);
   backdrop-filter: blur(12px);
 }
 
 aside {
-  background: var(--card);
-  border-right: 1px solid var(--border);
+  background: rgba(5, 5, 9, 0.98);
+  border-right: 1px solid rgba(248, 191, 64, 0.16);
   backdrop-filter: blur(14px);
 }
 
 /* ───────────────────────────────────────────────────────────
-   PRINT – invoice pages
+   PRINT / INVOICE
    ─────────────────────────────────────────────────────────── */
+
+/* ---------- INVOICE LAYOUT (screen) ---------- */
+
+.invoice-shell {
+  background: #f3f4f6; /* light grey behind the “paper” on screen */
+}
+
+.invoice-print {
+  margin: 0 auto;
+  background: #ffffff;
+  color: #020617;
+  padding: 24px 24px 28px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+/* keep it around A4 width on large monitors */
+@media (min-width: 1024px) {
+  .invoice-print {
+    max-width: 210mm;
+  }
+}
+
+/* ---------- PRINT RULES ---------- */
 @media print {
+  @page {
+    size: A4;
+    margin: 8mm 10mm 12mm 10mm; /* top, right, bottom, left */
+  }
+
+  html,
+  body,
+  .app-shell,
+  .app-main,
+  main,
+  .invoice-shell {
+    background: #ffffff !important;
+  }
+
+  html,
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide app chrome / buttons */
   aside,
-  nav,
   header,
-  footer,
   .no-print {
     display: none !important;
   }
 
-  body {
-    background: #ffffff;
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  body * {
-    visibility: hidden;
-  }
-
-  .invoice-print,
-  .invoice-print * {
-    visibility: visible;
+  .invoice-shell {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
   }
 
   .invoice-print {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    background: #ffffff;
-    box-shadow: none;
-    border: 0;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important; /* @page margins give the white border */
   }
 }

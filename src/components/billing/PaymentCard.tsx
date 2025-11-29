@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/components/billing/PaymentCard.tsx
+"use client";
 
 type Split = { cash?: number; card?: number; upi?: number };
 
@@ -45,50 +46,63 @@ export default function PaymentCard({
       </div>
 
       {mode === "SPLIT" && (
-        <div className="grid gap-3 md:grid-cols-3">
-          <input
-            placeholder="Cash ₹"
-            value={split.cash || ""}
-            onChange={(e) =>
-              onSplit({
-                ...split,
-                cash: Number(e.target.value || 0),
-              })
-            }
-            className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          />
-          <input
-            placeholder="Card ₹"
-            value={split.card || ""}
-            onChange={(e) =>
-              onSplit({
-                ...split,
-                card: Number(e.target.value || 0),
-              })
-            }
-            className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          />
-          <input
-            placeholder="UPI ₹"
-            value={split.upi || ""}
-            onChange={(e) =>
-              onSplit({
-                ...split,
-                upi: Number(e.target.value || 0),
-              })
-            }
-            className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          />
+        <div className="space-y-2">
+          <div className="grid gap-3 md:grid-cols-3">
+            <input
+              type="number"
+              min={0}
+              placeholder="Cash ₹"
+              value={split.cash || ""}
+              onChange={(e) =>
+                onSplit({
+                  ...split,
+                  cash: Number(e.target.value || 0),
+                })
+              }
+              className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="Card ₹"
+              value={split.card || ""}
+              onChange={(e) =>
+                onSplit({
+                  ...split,
+                  card: Number(e.target.value || 0),
+                })
+              }
+              className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="UPI ₹"
+              value={split.upi || ""}
+              onChange={(e) =>
+                onSplit({
+                  ...split,
+                  upi: Number(e.target.value || 0),
+                })
+              }
+              className="rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
+
+          <p className="text-[11px] text-muted">
+            Split total: <span className="font-medium">₹{sum.toFixed(2)}</span>{" "}
+            / Expected:{" "}
+            <span className="font-medium">
+              ₹{expectedTotal.toFixed(2)}
+            </span>
+          </p>
         </div>
       )}
 
       {mismatch && (
         <p className="mt-2 text-[11px] text-danger">
-          Split total must equal grand total (
-          <span className="font-medium">
-            ₹{expectedTotal.toFixed(2)}
-          </span>
-          ).
+          Split total must equal grand total. Please adjust the
+          amounts.
         </p>
       )}
     </section>

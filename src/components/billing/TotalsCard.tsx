@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/components/billing/TotalsCard.tsx
+"use client";
 
 import { inr } from "@/lib/format";
 

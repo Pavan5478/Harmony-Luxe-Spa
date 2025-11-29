@@ -1,87 +1,49 @@
 ﻿// src/lib/billno.ts
-import { readRows } from "@/lib/sheets";
+import { loadBillsFromSheet } from "./sheets";
 
 /**
- * FY helper: returns "YYYY-YY" with FY as Apr–Mar.
- * e.g. 11 Nov 2025 -> "2025-26"
+ * Compute current financial year string, e.g. "2025-26".
+ * Assumes FY starts in April.
  */
-function fiscalYearString(d = new Date()) {
-  const y = d.getFullYear();
-  const m = d.getMonth(); // 0=Jan ... 3=Apr
-  const start = m >= 3 ? y : y - 1;
-  const end2 = ((start + 1) % 100).toString().padStart(2, "0");
-  return `${start}-${end2}`;
-}
-
-/** Find the max serial used in a given FY from the Invoices sheet. */
-async function maxSerialForFY(fy: string) {
-  const rows = await readRows("Invoices!A2:A"); // only BillNo column
-  const re = /^(\d{4}-\d{2})\/(\d{6})$/;
-  let max = 0;
-
-  for (const r of rows) {
-    const bn = String(r[0] || "");
-    const m = re.exec(bn);
-    if (!m || m[1] !== fy) continue;
-    const n = Number(m[2]) || 0;
-    if (n > max) max = n;
+function getFinancialYear(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0 = Jan
+  if (month >= 3) {
+    // April or later
+    const next = String((year + 1) % 100).padStart(2, "0");
+    return `${year}-${next}`;
   }
-  return max;
+  // Jan–Mar belongs to previous FY
+  const prev = year - 1;
+  const next = String(year % 100).padStart(2, "0");
+  return `${prev}-${next}`;
 }
 
-// --- internal state ---
-let finYearOverride: string | null = null;
-let finYearCache: string | null = null;
-let seq = 0; // last issued serial in finYearCache
+/**
+ * Generate next bill number using:
+ *   {FY}/{6-digit sequence}
+ * Example:
+ *   2025-26/000123
+ */
+export async function nextBillNo(): Promise<string> {
+  const fy = getFinancialYear();
+  const prefix = `${fy}/`;
 
-async function ensureSync(date = new Date()) {
-  const fy = finYearOverride ?? fiscalYearString(date);
+  const bills = await loadBillsFromSheet();
+  let maxSeq = 0;
 
-  if (finYearCache !== fy) {
-    finYearCache = fy;
-    seq = await maxSerialForFY(fy);
-  } else {
-    const maxNow = await maxSerialForFY(fy);
-    if (seq < maxNow) seq = maxNow;
-  }
-}
+  for (const b of bills) {
+    const billNo = String(b.billNo || "").trim();
+    if (!billNo.startsWith(prefix)) continue;
 
-/** Generate the next bill number like "2025-26/000123". */
-export async function nextBillNo(date = new Date()) {
-  if (!finYearOverride) {
-    const fyNow = fiscalYearString(date);
-    if (finYearCache !== fyNow) {
-      finYearCache = fyNow;
-      seq = await maxSerialForFY(fyNow);
+    const tail = billNo.slice(prefix.length);
+    const n = parseInt(tail, 10);
+    if (!Number.isNaN(n) && n > maxSeq) {
+      maxSeq = n;
     }
   }
-  await ensureSync(date);
-  seq += 1;
-  return `${finYearCache}/${String(seq).padStart(6, "0")}`;
-}
 
-/** Manually set the FY (rare). Also re-syncs seq from existing bills for that FY. */
-export async function setFinYear(v: string) {
-  finYearOverride = v;
-  finYearCache = v;
-  seq = await maxSerialForFY(v);
-}
-
-/** Manually set the next serial (1-based). */
-export async function setNextSeq(startAt: number) {
-  await ensureSync();
-  seq = Math.max(0, startAt - 1);
-}
-
-/** Reset to current FY and recompute from existing bills. */
-export async function resetCounter() {
-  finYearOverride = null;
-  finYearCache = fiscalYearString();
-  seq = await maxSerialForFY(finYearCache);
-}
-
-/** Introspect the next number that will be issued. */
-export async function getCounter() {
-  await ensureSync();
-  return { finYear: finYearCache!, next: seq + 1 };
+  const nextSeq = maxSeq + 1;
+  const padded = String(nextSeq).padStart(6, "0");
+  return `${prefix}${padded}`;
 }

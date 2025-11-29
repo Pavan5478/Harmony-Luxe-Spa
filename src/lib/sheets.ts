@@ -1,7 +1,7 @@
 // src/lib/sheets.ts
 import { google } from "googleapis";
 
-// ----- auth + client helpers -----
+// ---------- auth + client helpers ----------
 function getAuth() {
   const client_email = process.env.GOOGLE_CLIENT_EMAIL!;
   const private_key = (process.env.GOOGLE_PRIVATE_KEY || "")
@@ -29,7 +29,7 @@ function getSheetsClient() {
   return { sheets, spreadsheetId };
 }
 
-// ----- generic helpers -----
+// ---------- generic helpers ----------
 export async function appendRows(range: string, values: any[][]) {
   const { sheets, spreadsheetId } = getSheetsClient();
   await sheets.spreadsheets.values.append({
@@ -47,7 +47,7 @@ export async function readRows(range: string) {
   return res.data.values || [];
 }
 
-// ----- invoice upsert + delete helpers -----
+// ---------- invoices ----------
 
 /**
  * Upsert a row in Invoices sheet.
@@ -55,7 +55,7 @@ export async function readRows(range: string) {
  */
 async function upsertInvoiceRow(bill: any, invRow: any[]) {
   const { sheets, spreadsheetId } = getSheetsClient();
-  const range = "Invoices!A2:X"; // 24 columns incl. Status + RawJson
+  const range = "Invoices!A2:X"; // 24 cols
 
   const existing = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -72,13 +72,11 @@ async function upsertInvoiceRow(bill: any, invRow: any[]) {
   if (draftId) {
     index = rows.findIndex((r) => String(r[1] ?? "").trim() === draftId);
   }
-
   if (index === -1 && billNo) {
     index = rows.findIndex((r) => String(r[0] ?? "").trim() === billNo);
   }
 
   if (index === -1) {
-    // append new
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range,
@@ -87,8 +85,7 @@ async function upsertInvoiceRow(bill: any, invRow: any[]) {
       requestBody: { values: [invRow] },
     });
   } else {
-    // update in-place
-    const rowNumber = index + 2; // header is row 1
+    const rowNumber = index + 2; // header = row 1
     const rowRange = `Invoices!A${rowNumber}:X${rowNumber}`;
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -106,6 +103,8 @@ async function upsertInvoiceRow(bill: any, invRow: any[]) {
  *
  * It also stores the full bill JSON in the last column (RawJson)
  * so we can reconstruct everything from Sheets later.
+ *
+ * Supports bill.billDate (manual invoice date).
  */
 export async function saveInvoiceToSheets(bill: any) {
   const t = bill.totals || {};
@@ -138,11 +137,18 @@ export async function saveInvoiceToSheets(bill: any) {
   const status = bill.status || "FINAL";
   const rawJson = JSON.stringify(bill ?? {});
 
+  // prefer manual billDate if provided
+  const dateISO =
+    bill.billDate ||
+    bill.finalizedAt ||
+    bill.createdAt ||
+    new Date().toISOString();
+
   // 24 columns (A:X)
   const invRow = [
     bill.billNo || "", // A BillNo
     bill.id || "", // B DraftId
-    bill.finalizedAt || bill.createdAt || "", // C DateISO
+    dateISO, // C DateISO (manual invoice date)
     bill.customer?.name || "", // D CustomerName
     bill.customer?.phone || "", // E Phone
     bill.customer?.email || "", // F Email
@@ -168,7 +174,7 @@ export async function saveInvoiceToSheets(bill: any) {
 
   await upsertInvoiceRow(bill, invRow);
 
-  // Lines: only for final invoices with a bill number
+  // Lines: only for FINAL invoices with a bill number
   if (!bill.billNo) return;
 
   const lineRows: any[][] = (bill.lines || []).map((l: any, ix: number) => [
@@ -195,6 +201,7 @@ export async function saveBillToSheet(bill: any) {
 /**
  * Load all bills from Invoices sheet.
  * If RawJson column is present, that is used as the source of truth.
+ * Ensures bill.billDate is populated from DateISO column if missing.
  */
 export async function loadBillsFromSheet(): Promise<any[]> {
   const rows = await readRows("Invoices!A2:X");
@@ -203,10 +210,18 @@ export async function loadBillsFromSheet(): Promise<any[]> {
   for (const r of rows) {
     if (!r || r.length === 0) continue;
 
+    const sheetDateISO = (r[2] as string) || "";
+
     const raw = r[23]; // X = RawJson
     if (raw && typeof raw === "string") {
       try {
         const parsed = JSON.parse(raw);
+
+        // make sure billDate is present
+        if (!parsed.billDate && sheetDateISO) {
+          parsed.billDate = sheetDateISO;
+        }
+
         bills.push(parsed);
         continue;
       } catch {
@@ -215,7 +230,8 @@ export async function loadBillsFromSheet(): Promise<any[]> {
     }
 
     const status = (r[22] as string) || "FINAL";
-    const createdAt = r[2] || new Date().toISOString();
+    const dateISO =
+      sheetDateISO || new Date().toISOString();
 
     const totals = {
       subtotal: Number(r[8] || 0),
@@ -232,8 +248,9 @@ export async function loadBillsFromSheet(): Promise<any[]> {
       status,
       billNo: r[0] || undefined,
       id: r[1] || undefined,
-      createdAt,
-      finalizedAt: status === "FINAL" ? createdAt : undefined,
+      billDate: dateISO, // use DateISO column as invoice date
+      createdAt: dateISO,
+      finalizedAt: status === "FINAL" ? dateISO : undefined,
       customer:
         r[3] || r[4] || r[5]
           ? {
@@ -302,12 +319,121 @@ export async function moveInvoiceToDeleted(key: string) {
   return true;
 }
 
-// ----- bootstrap + dev reset helpers -----
+// ---------- expenses ----------
+
+export async function loadExpensesFromSheet(): Promise<any[]> {
+  const rows = await readRows("Expenses!A2:G");
+  const out: any[] = [];
+
+  for (const r of rows) {
+    if (!r || r.length === 0) continue;
+
+    out.push({
+      id: r[0] || "",
+      dateISO: r[1] || "",
+      category: r[2] || "",
+      description: r[3] || "",
+      amount: Number(r[4] || 0),
+      paymentMode: String(r[5] || "").toUpperCase() || "OTHER",
+      notes: r[6] || "",
+    });
+  }
+
+  return out;
+}
+
+export async function saveExpenseToSheet(expense: any) {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const range = "Expenses!A2:G";
+
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+  const rows = res.data.values || [];
+
+  const id = String(expense.id ?? "").trim();
+  if (!id) {
+    throw new Error("Expense id missing");
+  }
+
+  const row = [
+    id,
+    expense.dateISO || expense.date || "",
+    expense.category || "",
+    expense.description || "",
+    Number(expense.amount || 0),
+    expense.paymentMode || "",
+    expense.notes || "",
+  ];
+
+  const idx = rows.findIndex(
+    (r) => String(r[0] ?? "").trim() === id
+  );
+
+  if (idx === -1) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [row] },
+    });
+  } else {
+    const rowNumber = idx + 2;
+    const rowRange = `Expenses!A${rowNumber}:G${rowNumber}`;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: rowRange,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [row] },
+    });
+  }
+}
 
 /**
- * Create required sheets (Users, Invoices, Lines, Deleted) if missing
- * and ensure header rows.
+ * Move an expense from Expenses → ExpensesDeleted by Id.
  */
+export async function deleteExpenseFromSheet(id: string) {
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const range = "Expenses!A2:G";
+
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+  const rows = res.data.values || [];
+
+  const trimmedId = String(id || "").trim();
+  const idx = rows.findIndex(
+    (r) => String(r[0] ?? "").trim() === trimmedId
+  );
+  if (idx === -1) return false;
+
+  const row = rows[idx];
+
+  // 1) append to Trash sheet
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: "ExpensesDeleted!A2:G",
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+
+  // 2) remove from active Expenses sheet
+  const remaining = rows.slice(0, idx).concat(rows.slice(idx + 1));
+
+  await sheets.spreadsheets.values.clear({ spreadsheetId, range });
+
+  if (remaining.length) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [remaining] },
+    });
+  }
+
+  return true;
+}
+
+// ---------- bootstrap + dev reset ----------
+
 export async function ensureSheetStructure() {
   const { sheets, spreadsheetId } = getSheetsClient();
 
@@ -394,9 +520,33 @@ export async function ensureSheetStructure() {
         "RawJson",
       ],
     },
+    {
+      title: "Expenses",
+      headers: [
+        "Id",
+        "DateISO",
+        "Category",
+        "Description",
+        "Amount",
+        "PaymentMode",
+        "Notes",
+      ],
+    },
+    {
+      title: "ExpensesDeleted",
+      headers: [
+        "Id",
+        "DateISO",
+        "Category",
+        "Description",
+        "Amount",
+        "PaymentMode",
+        "Notes",
+      ],
+    },
   ];
 
-  // 1) create missing sheets
+  // create missing sheets
   const requests: any[] = [];
   for (const s of required) {
     if (!existingTitles.has(s.title)) {
@@ -413,7 +563,7 @@ export async function ensureSheetStructure() {
     });
   }
 
-  // 2) ensure headers
+  // ensure headers
   for (const s of required) {
     const lastColIndex = s.headers.length - 1;
     const lastColLetter = String.fromCharCode(65 + lastColIndex); // 65 = 'A'

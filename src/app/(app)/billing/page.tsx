@@ -33,7 +33,9 @@ export default function BillingPage() {
           | "ACCOUNTS"
           | undefined;
         if (role === "ACCOUNTS") router.replace("/dashboard");
-      } catch {}
+      } catch {
+        // fail closed to dashboard on error
+      }
     })();
   }, [router]);
 
@@ -57,18 +59,35 @@ export default function BillingPage() {
   }>({});
   const [notes, setNotes] = useState("");
 
+  // Manual invoice date (billDate). Stored as YYYY-MM-DD in state.
+  const [invoiceDate, setInvoiceDate] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+
   const [cashierEmail, setCashierEmail] = useState("cashier@example.com");
 
-  // 🔹 track original status when editing (DRAFT / FINAL / VOID)
+  // track original status when editing (DRAFT / FINAL / VOID)
   const [initialStatus, setInitialStatus] = useState<
     "DRAFT" | "FINAL" | "VOID" | undefined
   >(undefined);
 
   // Load items
   useEffect(() => {
-    fetch("/api/items")
-      .then((r) => r.json())
-      .then((j) => setItems(j.items || []));
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/items", { cache: "no-store" });
+        if (!r.ok) throw new Error(await r.text());
+        const j = await r.json();
+        if (!cancelled) setItems(j.items || []);
+      } catch (err) {
+        console.error("Failed to load items", err);
+        if (!cancelled) setItems([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load cashier email from localStorage (client only, safe for hydration)
@@ -76,7 +95,9 @@ export default function BillingPage() {
     try {
       const stored = localStorage.getItem("bb.email");
       if (stored) setCashierEmail(stored);
-    } catch {}
+    } catch {
+      // ignore
+    }
   }, []);
 
   // Edit existing bill
@@ -105,8 +126,10 @@ export default function BillingPage() {
 
         if (!bill) return;
 
-        // 🔹 Remember status of the bill we’re editing
-        setInitialStatus(bill.status as "DRAFT" | "FINAL" | "VOID" | undefined);
+        // Remember status of the bill we’re editing
+        setInitialStatus(
+          bill.status as "DRAFT" | "FINAL" | "VOID" | undefined
+        );
 
         setCustomer({
           name: bill.customer?.name ?? "",
@@ -126,6 +149,21 @@ export default function BillingPage() {
         setPaymentMode(bill.paymentMode ?? "CASH");
         setSplit(bill.split ?? {});
         setNotes(bill.notes ?? "");
+
+        // Prefill invoice date: prefer bill.billDate, then finalizedAt, then createdAt
+        try {
+          const rawDate: string =
+            bill.billDate ||
+            bill.finalizedAt ||
+            bill.createdAt ||
+            new Date().toISOString();
+          const d = new Date(rawDate);
+          if (!isNaN(d.getTime())) {
+            setInvoiceDate(d.toISOString().slice(0, 10));
+          }
+        } catch {
+          setInvoiceDate(new Date().toISOString().slice(0, 10));
+        }
       } catch (err) {
         console.error("Error loading bill for edit", err);
       }
@@ -186,7 +224,8 @@ export default function BillingPage() {
   const canSave =
     lines.length > 0 && !discountTooHigh && !splitMismatch;
 
-  const payload = {
+  // payload sent to API (draft create / update)
+  const payload: any = {
     cashierEmail,
     customer,
     lines,
@@ -198,6 +237,10 @@ export default function BillingPage() {
     split,
     notes,
     totals,
+    // billDate goes to backend and then to Sheets (DateISO column)
+    billDate: invoiceDate
+      ? new Date(invoiceDate).toISOString()
+      : undefined,
   };
 
   return (
@@ -219,20 +262,37 @@ export default function BillingPage() {
           </div>
 
           <div className="rounded-xl bg-background px-3 py-2 text-[11px] text-muted">
-            <div className="font-medium text-foreground">Cashier</div>
-            <div className="mt-1 max-w-[220px] truncate">
-              {cashierEmail}
-            </div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span>
-                {lines.length} line
-                {lines.length === 1 ? "" : "s"},{" "}
-                {paymentMode === "SPLIT"
-                  ? "split payment"
-                  : paymentMode.toLowerCase()}{" "}
-                mode
-              </span>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-medium text-foreground">Cashier</div>
+                <div className="mt-1 max-w-[220px] truncate">
+                  {cashierEmail}
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span>
+                    {lines.length} line
+                    {lines.length === 1 ? "" : "s"},{" "}
+                    {paymentMode === "SPLIT"
+                      ? "split payment"
+                      : paymentMode.toLowerCase()}{" "}
+                    mode
+                  </span>
+                </div>
+              </div>
+
+              {/* Manual invoice date */}
+              <div className="min-w-[140px]">
+                <label className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                  Invoice date
+                </label>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  className="mt-1 w-full rounded-full border border-border bg-background px-3 py-1.5 text-[11px] shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
             </div>
           </div>
         </div>

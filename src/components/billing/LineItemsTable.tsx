@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/components/billing/LineItemsTable.tsx
+"use client";
 
 import type { BillLine } from "@/types/billing";
 import { inr } from "@/lib/format";
@@ -30,7 +31,7 @@ export default function LineItemsTable({
             <th className="py-2 px-2 font-medium">Qty</th>
             <th className="py-2 px-2 font-medium">Rate</th>
             <th className="py-2 px-2 font-medium">Amount</th>
-            <th className="py-2 pr-3 text-right font-medium"></th>
+            <th className="py-2 pr-3 text-right font-medium" />
           </tr>
         </thead>
         <tbody>

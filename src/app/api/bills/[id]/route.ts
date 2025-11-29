@@ -10,6 +10,7 @@ import {
 } from "@/store/bills";
 import { moveInvoiceToDeleted } from "@/lib/sheets";
 
+// Next 15+/16: params is a Promise
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -99,43 +100,24 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       const b = await markPrinted(idOrNo);
       return NextResponse.json({ bill: b });
     } catch (e: any) {
-      return NextResponse.json(
-        { error: e?.message || "Not found" },
-        { status: 404 }
-      );
+      const msg = e instanceof Error ? e.message : "Not found";
+      return NextResponse.json({ error: msg }, { status: 404 });
     }
   }
 
   // 2) finalize draft -> FINAL (Sheets is updated inside finalizeDraft)
-  const existing = await getBill(idOrNo);
-  if (!existing) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  const status = (existing as any).status as
-    | "DRAFT"
-    | "FINAL"
-    | "VOID"
-    | undefined;
-
-  if (status !== "DRAFT") {
-    return NextResponse.json(
-      { error: "Only draft bills can be finalized." },
-      { status: 400 }
-    );
-  }
-
   const cashierEmail: string =
-    body?.cashierEmail || session.user.email || "unknown@example.com";
+    body?.cashierEmail ||
+    session.user.email ||
+    "unknown@example.com";
 
   try {
     const fin = await finalizeDraft(idOrNo, cashierEmail);
     return NextResponse.json({ bill: fin, savedToSheets: true });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Failed to finalize" },
-      { status: 400 }
-    );
+    const msg = e instanceof Error ? e.message : "Failed to finalize";
+    const statusCode = msg.includes("Draft not found") ? 404 : 400;
+    return NextResponse.json({ error: msg }, { status: statusCode });
   }
 }
 
@@ -158,7 +140,7 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   }
 
   try {
-    // Mark status = VOID in Sheets (for audit history)
+    // Mark status = VOID in store / Sheets (for audit history)
     const voided = await voidBill(idOrNo);
 
     // Key used to locate row in Invoices sheet

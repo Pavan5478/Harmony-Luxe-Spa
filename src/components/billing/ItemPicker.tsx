@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/components/billing/ItemPicker.tsx
+"use client";
 
 type Item = { id: string; name: string; variant?: string; price: number };
 
@@ -20,6 +21,7 @@ export default function ItemPicker({
           if (it) onPick(it);
           e.currentTarget.value = "";
         }}
+        defaultValue=""
       >
         <option value="">+ Add line item…</option>
         {items.map((it) => (

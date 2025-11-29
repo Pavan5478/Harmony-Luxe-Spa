@@ -1,18 +1,31 @@
-﻿// src/components/layout/Topbar.tsx
+﻿﻿// src/components/layout/Topbar.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  MouseEvent as ReactMouseEvent,
+} from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 type Role = "ADMIN" | "CASHIER" | "ACCOUNTS" | null;
 
+type NavLink = {
+  href: string;
+  label: string;
+};
+
 export default function Topbar() {
   const router = useRouter();
   const pathname = usePathname();
+
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // fetch identity
@@ -23,180 +36,182 @@ export default function Topbar() {
         const j = r.ok ? await r.json() : {};
         setEmail(j?.email || "");
         setRole((j?.role as Role) ?? null);
-      } catch {}
+      } catch {
+        // ignore
+      }
     })();
   }, []);
 
   // init theme from localStorage / system
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("bb.theme");
-    const prefersDark = window.matchMedia?.(
-      "(prefers-color-scheme: dark)"
-    ).matches;
-    const next =
-      stored === "dark" || (!stored && prefersDark) ? "dark" : "light";
+    try {
+      const root = window.document.documentElement;
+      const stored = window.localStorage.getItem("bb.theme");
+      const sysDark = window.matchMedia?.(
+        "(prefers-color-scheme: dark)"
+      ).matches;
 
-    document.documentElement.classList.toggle(
-      "theme-dark",
-      next === "dark"
-    );
-    setTheme(next);
+      const initial =
+        stored === "dark" || (!stored && sysDark) ? "dark" : "light";
+
+      setTheme(initial);
+      if (initial === "dark") root.classList.add("theme-dark");
+      else root.classList.remove("theme-dark");
+    } catch {
+      // ignore
+    }
   }, []);
 
   function toggleTheme() {
     setTheme((prev) => {
-      const next = prev === "dark" ? "light" : "dark";
+      const next = prev === "light" ? "dark" : "light";
       if (typeof window !== "undefined") {
-        document.documentElement.classList.toggle(
-          "theme-dark",
-          next === "dark"
-        );
-        window.localStorage.setItem("bb.theme", next);
+        try {
+          const root = window.document.documentElement;
+          if (next === "dark") root.classList.add("theme-dark");
+          else root.classList.remove("theme-dark");
+          window.localStorage.setItem("bb.theme", next);
+        } catch {
+          // ignore
+        }
       }
       return next;
     });
   }
-
-  // close on click outside / Esc
-  useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    }
-    function onEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
-    }
-    if (menuOpen) {
-      document.addEventListener("mousedown", onDocClick);
-      document.addEventListener("keydown", onEsc);
-    }
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, [menuOpen]);
-
-  function goBack() {
-    if (typeof window !== "undefined" && window.history.length > 1)
-      router.back();
-    else router.push("/dashboard");
-  }
-
-  const crumbs = useMemo(() => {
-    const parts = (pathname || "/").split("/").filter(Boolean);
-    const list: { href: string; label: string }[] = [];
-    let acc = "";
-    for (const p of parts) {
-      acc += `/${p}`;
-      list.push({
-        href: acc,
-        label: p
-          .replace(/[-_]/g, " ")
-          .replace(/\b\w/g, (s) => s.toUpperCase()),
-      });
-    }
-    return list;
-  }, [pathname]);
-
-  const roleChip =
-    role === "ADMIN"
-      ? "bg-rose-50 text-rose-700 border border-rose-200"
-      : role === "CASHIER"
-      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-      : role === "ACCOUNTS"
-      ? "bg-amber-50 text-amber-800 border border-amber-200"
-      : "bg-slate-100 text-slate-700 border border-slate-200";
 
   async function doLogout() {
     try {
       await fetch("/api/logout", { method: "POST" });
     } catch {}
     try {
-      if (typeof window !== "undefined")
-        localStorage.removeItem("bb.email");
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("bb.email");
+      }
     } catch {}
     router.replace("/login");
   }
 
+  function onMenuBackgroundClick(e: ReactMouseEvent<HTMLDivElement>) {
+    if (e.target === e.currentTarget) {
+      setMenuOpen(false);
+    }
+  }
+
+  // Links for mobile menu based on role
+  const navLinks: NavLink[] = useMemo(() => {
+    if (role === "ADMIN") {
+      return [
+        { href: "/dashboard", label: "Dashboard" },
+        { href: "/menu", label: "Menu" },
+        { href: "/billing", label: "Billing" },
+        { href: "/invoices", label: "Invoices" },
+        { href: "/expenses", label: "Expenses" },
+        { href: "/reports", label: "Reports" },
+        { href: "/settings", label: "Settings" },
+      ];
+    }
+    if (role === "ACCOUNTS") {
+      return [
+        { href: "/dashboard", label: "Dashboard" },
+        { href: "/invoices", label: "Invoices" },
+        { href: "/expenses", label: "Expenses" },
+        { href: "/reports", label: "Reports" },
+        { href: "/settings", label: "Settings" },
+      ];
+    }
+    // CASHIER / unknown
+    return [
+      { href: "/dashboard", label: "Dashboard" },
+      { href: "/billing", label: "Billing" },
+      { href: "/invoices", label: "Invoices" },
+      { href: "/settings", label: "Settings" },
+    ];
+  }, [role]);
+
+  // Label under logo: basic section name
+  const currentLabel = useMemo(() => {
+    if (!pathname || pathname === "/dashboard" || pathname === "/") {
+      return "Dashboard overview";
+    }
+    if (pathname.startsWith("/billing")) return "Billing";
+    if (pathname.startsWith("/invoices")) return "Invoices";
+    if (pathname.startsWith("/menu")) return "Menu";
+    if (pathname.startsWith("/reports")) return "Reports";
+    if (pathname.startsWith("/settings")) return "Settings";
+    return "Workspace";
+  }, [pathname]);
+
+  const roleLabel =
+    role === "ADMIN"
+      ? "Admin"
+      : role === "CASHIER"
+      ? "Cashier"
+      : role === "ACCOUNTS"
+      ? "Accounts"
+      : "";
+
   return (
-    <header className="no-print sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-4 lg:px-0">
-        {/* Left: Back + Breadcrumbs */}
-        <div className="min-w-0 flex items-center gap-3">
+    <header className="no-print sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-3 sm:h-16 sm:px-4 lg:px-0">
+        {/* Left: mobile menu + brand */}
+        <div className="flex items-center gap-2">
+          {/* Mobile menu button */}
           <button
-            onClick={goBack}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50"
-            aria-label="Back"
-            title="Back"
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-slate-700 shadow-sm lg:hidden"
+            aria-label="Open navigation"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
               <path
-                d="M15 5l-7 7 7 7"
+                d="M4 7h16M4 12h16M4 17h16"
                 stroke="currentColor"
-                strokeWidth="2"
-                fill="none"
+                strokeWidth="1.8"
                 strokeLinecap="round"
               />
             </svg>
           </button>
 
-          <nav
-            aria-label="Breadcrumb"
-            className="hidden items-center gap-1 text-sm text-slate-600 sm:flex"
+          {/* Brand */}
+          <a
+            href="/dashboard"
+            className="flex items-center gap-2 text-sm font-semibold text-foreground"
           >
-            <a href="/dashboard" className="hover:text-slate-900">
-              Dashboard
-            </a>
-            {crumbs.map((c, i) => (
-              <span key={c.href} className="flex items-center gap-1">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  className="text-slate-400"
-                >
-                  <path
-                    d="M9 18l6-6-6-6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <a
-                  href={c.href}
-                  className={`max-w-[14ch] truncate hover:text-slate-900 ${
-                    i === crumbs.length - 1
-                      ? "font-medium text-slate-900"
-                      : ""
-                  }`}
-                >
-                  {c.label}
-                </a>
-              </span>
-            ))}
-          </nav>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-xs text-primary shadow-sm">
+              XS
+            </div>
+            <div className="hidden flex-col leading-tight sm:flex">
+              <span className="text-xs font-semibold">XiphiasSpa</span>
+              <span className="text-[10px] text-muted">{currentLabel}</span>
+            </div>
+          </a>
         </div>
 
         {/* Right: theme toggle + user */}
         <div className="flex items-center gap-2">
-          {/* theme button */}
+          {/* Theme toggle */}
           <button
+            type="button"
             onClick={toggleTheme}
-            aria-label="Toggle dark mode"
-            aria-pressed={theme === "dark"}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-xs text-muted shadow-sm"
+            aria-label="Toggle theme"
           >
             {theme === "dark" ? (
               // sun icon
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-                <circle cx="12" cy="12" r="4" fill="currentColor" />
-                <path
-                  d="M12 3v2.5M12 18.5V21M4.22 4.22L5.9 5.9M18.1 18.1l1.68 1.68M3 12h2.5M18.5 12H21M4.22 19.78 5.9 18.1M18.1 5.9 19.78 4.22"
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="4"
                   stroke="currentColor"
-                  strokeWidth="1.6"
+                  strokeWidth="1.8"
                   fill="none"
+                />
+                <path
+                  d="M12 3v2.5M12 18.5V21M4.22 4.22l1.77 1.77M17.99 17.99l1.79 1.79M3 12h2.5M18.5 12H21M4.22 19.78l1.77-1.77M17.99 6.01l1.79-1.79"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                 />
               </svg>
@@ -204,107 +219,123 @@ export default function Topbar() {
               // moon icon
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
                 <path
-                  d="M20 14.5A7.5 7.5 0 0 1 10.5 5 6 6 0 1 0 20 14.5Z"
-                  fill="currentColor"
+                  d="M19 14.5A7.5 7.5 0 0 1 10.5 6 6 6 0 1 0 19 14.5Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
                 />
               </svg>
             )}
           </button>
 
-          {/* user button + dropdown */}
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm hover:bg-slate-50"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              title={email || "User"}
-            >
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold uppercase text-white shadow">
-                {(email || "U").charAt(0).toUpperCase()}
-              </div>
-              <div className="hidden flex-col items-start leading-tight md:flex">
-                <span className="max-w-[220px] truncate text-xs">
-                  {email || "—"}
-                </span>
-                <span
-                  className={`mt-0.5 rounded px-1.5 py-0.5 text-[11px] ${roleChip}`}
-                >
-                  {role || "USER"}
-                </span>
-              </div>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                className="text-slate-500"
-              >
-                <path
-                  d="M7 10l5 5 5-5"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  fill="none"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
+          {/* User info (desktop) */}
+          <div className="hidden flex-col items-end leading-tight md:flex">
+            <span className="max-w-[180px] truncate text-xs font-medium text-foreground">
+              {email || "—"}
+            </span>
+            <span className="text-[10px] text-muted">
+              {roleLabel || "Staff"}
+            </span>
+          </div>
 
-            {/* Dropdown */}
-            <div
-              role="menu"
-              data-open={menuOpen ? "true" : "false"}
-              className="absolute right-0 mt-2 w-64 origin-top-right rounded-2xl border border-slate-100 bg-white p-2 text-sm shadow-xl transition-all duration-150 data-[open=false]:pointer-events-none data-[open=false]:-translate-y-1 data-[open=false]:opacity-0"
-            >
-              <div className="px-2 pb-2 text-xs text-slate-500">
-                Signed in as
-                <div className="truncate font-medium text-slate-900">
-                  {email || "—"}
+          {/* Logout button */}
+          <button
+            type="button"
+            onClick={doLogout}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-[11px] text-red-600 shadow-sm hover:bg-red-50"
+            aria-label="Logout"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
+              <path
+                d="M9 5H5v14h4M16 12H9m7-4 4 4-4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile menu overlay */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 lg:hidden"
+          onClick={onMenuBackgroundClick}
+        >
+          <div
+            ref={menuRef}
+            className="absolute left-0 right-0 top-0 mx-auto mt-2 w-[92%] max-w-sm rounded-2xl border border-border bg-card p-3 shadow-lg"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-border pb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-xs text-primary">
+                  XS
+                </div>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-xs font-semibold text-foreground">
+                    XiphiasSpa
+                  </span>
+                  <span className="text-[10px] text-muted">
+                    {roleLabel || "Staff"}
+                  </span>
                 </div>
               </div>
-              <a
-                href="/settings"
-                className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-slate-50"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24">
-                  <path
-                    d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
-                    fill="currentColor"
-                    opacity=".9"
-                  />
-                </svg>
-                Settings
-              </a>
-              <a
-                href="/invoices"
-                className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-slate-50"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24">
-                  <path
-                    d="M6 4h12v16H6z"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    fill="none"
-                  />
-                  <path
-                    d="M8 8h8M8 12h8M8 16h5"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    fill="none"
-                  />
-                </svg>
-                Invoices
-              </a>
               <button
-                onClick={doLogout}
-                className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-red-600 hover:bg-red-50"
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-background text-slate-600"
+                aria-label="Close menu"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
                   <path
-                    d="M15 17l5-5-5-5M20 12H9M12 20H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5"
+                    d="M6 6l12 12M18 6 6 18"
                     stroke="currentColor"
-                    strokeWidth="1.7"
-                    fill="none"
+                    strokeWidth="1.8"
                     strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-2 space-y-1">
+              {navLinks.map((link) => {
+                const active =
+                  pathname === link.href ||
+                  (pathname || "").startsWith(link.href + "/");
+                return (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm",
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted hover:bg-background hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {link.label}
+                  </a>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={doLogout}
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    d="M9 5H5v14h4M16 12H9m7-4 4 4-4 4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                 </svg>
                 Logout
@@ -312,7 +343,7 @@ export default function Topbar() {
             </div>
           </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }

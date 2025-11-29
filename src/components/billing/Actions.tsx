@@ -37,12 +37,10 @@ export default function BillingActions({
   const finalizing = loading === "FINAL";
   const previewing = loading === "PREVIEW";
 
-  // ─────────────────────────────────────────────
   // Helper: create or update a bill with latest payload
   // Returns the bill's "id" (draft id like D1, D2…)
-  // ─────────────────────────────────────────────
   async function persistBill(idOrNo?: string | null): Promise<string> {
-    // Update existing (draft or final)
+    // Update existing (draft)
     if (idOrNo) {
       const res = await fetch(`/api/bills/${encodeURIComponent(idOrNo)}`, {
         method: "PUT",
@@ -66,7 +64,7 @@ export default function BillingActions({
     return data.id as string;
   }
 
-  // ------------- Save / update draft or final -------------
+  // Save / update draft (no status change)
   async function handleSave() {
     if (disabled || saving || finalizing || previewing) return;
     setLoading("SAVE");
@@ -84,7 +82,7 @@ export default function BillingActions({
     }
   }
 
-  // ------------- Preview invoice (draft only) -------------
+  // Preview invoice (draft only)
   async function handlePreview() {
     if (disabled || saving || finalizing || previewing) return;
 
@@ -107,7 +105,7 @@ export default function BillingActions({
     }
   }
 
-  // ------------- Finalize draft → invoice -------------
+  // Finalize draft → FINAL invoice
   async function handleFinalize() {
     if (disabled || saving || finalizing || previewing) return;
 
@@ -152,7 +150,6 @@ export default function BillingActions({
     }
   }
 
-  // ───────────────── labels ─────────────────
   const saveLabel = (() => {
     if (!isEditing) return saving ? "Saving draft..." : "Save draft";
     if (isEditingFinal)
@@ -172,7 +169,7 @@ export default function BillingActions({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        {/* Save / Update button (can be hidden for some flows) */}
+        {/* Save / Update button (hidden when editing from invoices list) */}
         {showSave && (
           <button
             type="button"

@@ -33,6 +33,7 @@ export async function POST(req: Request) {
   const item = {
     id: String(body.id || "").trim(),
     name: String(body.name || "").trim(),
+    category: body.category ? String(body.category).trim() : undefined,
     variant: body.variant ? String(body.variant) : undefined,
     price: Number(body.price || 0),
     active: Boolean(body.active ?? true),

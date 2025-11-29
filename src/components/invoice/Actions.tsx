@@ -2,23 +2,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Status = "DRAFT" | "FINAL" | "VOID";
 
 type Props = {
-  idOrNo: string;        // billNo for FINAL, draft id for DRAFT
+  idOrNo: string;          // billNo for FINAL, draft id for DRAFT
   printedAt: string | null;
   status: Status;
+  /** if true and status is FINAL, auto-open print dialog once */
+  autoPrint?: boolean;
 };
 
 export default function InvoiceActions({
   idOrNo,
   printedAt,
   status,
+  autoPrint,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState<null | "PRINT" | "FINALIZE">(null);
+  const hasAutoPrinted = useRef(false);
 
   const isDraft = status === "DRAFT";
   const isFinal = status === "FINAL";
@@ -26,6 +30,17 @@ export default function InvoiceActions({
 
   const printing = loading === "PRINT";
   const finalizing = loading === "FINALIZE";
+
+  function printWithTitle(title: string) {
+    if (typeof window === "undefined") return;
+    const prev = document.title;
+    document.title = title;
+    window.print();
+    // restore after dialog opens
+    setTimeout(() => {
+      document.title = prev;
+    }, 500);
+  }
 
   async function markPrintedOnServer(key: string) {
     try {
@@ -46,9 +61,7 @@ export default function InvoiceActions({
       if (!printedAt) {
         await markPrintedOnServer(idOrNo);
       }
-      if (typeof window !== "undefined") {
-        window.print();
-      }
+      printWithTitle(`Invoice-${idOrNo}`);
       router.refresh();
     } finally {
       setLoading(null);
@@ -77,9 +90,7 @@ export default function InvoiceActions({
       // mark printed using final key
       await markPrintedOnServer(billNo);
 
-      if (typeof window !== "undefined") {
-        window.print();
-      }
+      printWithTitle(`Invoice-${billNo}`);
 
       router.replace(`/invoices/${encodeURIComponent(billNo)}`);
       router.refresh();
@@ -90,6 +101,15 @@ export default function InvoiceActions({
       setLoading(null);
     }
   }
+
+  // 🔄 auto-print when opened with ?print=1 and already FINAL
+  useEffect(() => {
+    if (!autoPrint || !isFinal || hasAutoPrinted.current) return;
+    hasAutoPrinted.current = true;
+    // fire-and-forget
+    handlePrint();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPrint, isFinal]);
 
   const hasPrintedOnce = !!printedAt;
 

@@ -1,4 +1,4 @@
-﻿// src/app/(app)/layout.tsx
+﻿﻿// src/app/(app)/layout.tsx
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { getSession } from "@/lib/session";
@@ -14,11 +14,11 @@ export default async function ProtectedLayout({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Fixed sidebar */}
+      {/* Fixed sidebar (desktop) */}
       <Sidebar />
 
-      {/* Main content column */}
-      <div className="ml-64 flex min-h-screen flex-1 flex-col">
+      {/* Main column */}
+      <div className="flex min-h-screen flex-1 flex-col lg:ml-64">
         <Topbar />
         <main className="flex-1 px-3 pb-6 pt-4 sm:px-4 lg:px-0">
           <div className="mx-auto max-w-6xl">{children}</div>
