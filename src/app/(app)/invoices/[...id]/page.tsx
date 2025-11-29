@@ -16,15 +16,17 @@ export default async function InvoicePage(props: PageProps) {
   const session = await getSession();
   if (!session.user) redirect("/login");
 
+  // Next 16: params / searchParams are Promises
   const { id } = await props.params;
   const sp = (await props.searchParams) || {};
   const autoPrint = sp.print === "1" || sp.print === "true";
 
-  // key = billNo or draft id
+  // Only first segment is used (billNo or draft id)
   const rawId = id?.[0] ?? "";
   const key = decodeURIComponent(rawId);
 
   const bills = await listBills();
+
   const found =
     bills.find((b: any) => String(b.billNo || "") === key) ||
     bills.find((b: any) => String(b.id || "") === key);
@@ -41,18 +43,14 @@ export default async function InvoicePage(props: PageProps) {
   const notes = (bill.notes || "").trim();
   const hasNotes = notes.length > 0;
 
-  const billDateISO =
-    bill.billDate || bill.finalizedAt || bill.createdAt;
+  const billDateISO = bill.billDate || bill.finalizedAt || bill.createdAt;
   const billDate = billDateISO ? new Date(billDateISO) : new Date();
 
   const customer = bill.customer || {};
   const status: "DRAFT" | "FINAL" | "VOID" =
     (bill.status as "DRAFT" | "FINAL" | "VOID") || "FINAL";
   const printedAt: string | null = bill.printedAt || null;
-  const idOrNo: string =
-    (bill.billNo as string) ||
-    (bill.id as string) ||
-    key;
+  const idOrNo: string = (bill.billNo as string) || (bill.id as string) || key;
 
   // TODO: later load this from Settings sheet
   const spaName = "XiphiasSpa";
@@ -81,30 +79,27 @@ export default async function InvoicePage(props: PageProps) {
 
   return (
     <div className="invoice-shell mx-auto max-w-5xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
-      {/* Top header (screen only) */}
+      {/* ── Top header (screen only) ─────────────────────────────── */}
       <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
             Invoice
           </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
             Bill #{bill.billNo || bill.id}
           </h1>
-          <p className="mt-1 text-xs text-muted sm:text-sm">
+          <p className="mt-1 text-xs text-muted sm:text-sm text-foreground">
             Official tax invoice. Use{" "}
-            <span className="font-medium text-foreground">Print</span>{" "}
-            or{" "}
-            <span className="font-medium text-foreground">
-              Save as PDF
-            </span>{" "}
-            below for an A4 copy.
+            <span className="font-medium text-foreground">Print</span> or{" "}
+            <span className="font-medium text-foreground">Save as PDF</span> for
+            an A4 copy.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 text-right text-[11px] text-muted sm:text-xs">
-          <div className={statusClass}>
-            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+          <span className={statusClass}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current text-foreground" />
             {statusLabel}
-          </div>
+          </span>
           <a
             href="/invoices"
             className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-background"
@@ -114,7 +109,7 @@ export default async function InvoicePage(props: PageProps) {
         </div>
       </div>
 
-      {/* Action bar (screen only) */}
+      {/* ── Action bar (screen only) ─────────────────────────────── */}
       <div className="no-print mb-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:px-5">
         <InvoiceActions
           idOrNo={idOrNo}
@@ -124,27 +119,20 @@ export default async function InvoicePage(props: PageProps) {
         />
       </div>
 
-      {/* Printable A4 page (pure white) */}
-      <div className="invoice-print bg-white text-slate-900">
-        {/* Letterhead */}
-        <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+      {/* ── Printable A4 invoice (white) ─────────────────────────── */}
+      <div className="invoice-print">
+        {/* Letterhead / logo section – always printed */}
+        {/* NOTE: replace the XS block with your actual logo:
+             <img src="/logo-invoice.png" alt="XiphiasSpa" className="h-10 w-auto" />
+             Put the file under /public/logo-invoice.png
+        */}
+        <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            {/* LOGO AREA
-               - Put your logo file in /public, e.g. /public/spa-logo-dark.png
-               - Replace the <span>XS</span> with the img below:
-
-                 <img
-                   src="/spa-logo-dark.png"
-                   alt={spaName}
-                   className="h-10 w-auto"
-                 />
-            */}
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-slate-900 text-lg font-semibold text-slate-900 sm:h-16 sm:w-16">
-              <span>XS</span>
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-black text-lg font-semibold text-white sm:h-16 sm:w-16">
+              XS
             </div>
-
             <div>
-              <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
                 {spaName}
               </h2>
               <div className="mt-1 text-[11px] text-slate-600 sm:text-xs">
@@ -172,22 +160,18 @@ export default async function InvoicePage(props: PageProps) {
             </div>
             {bill.cashierEmail && (
               <div>
-                <span className="font-medium text-slate-900">
-                  Cashier:
-                </span>{" "}
+                <span className="font-medium text-slate-900">Cashier:</span>{" "}
                 {bill.cashierEmail}
               </div>
             )}
             <div>
-              <span className="font-medium text-slate-900">
-                Status:
-              </span>{" "}
+              <span className="font-medium text-slate-900">Status:</span>{" "}
               {statusLabel}
             </div>
           </div>
-        </header>
+        </div>
 
-        {/* Billed to + payment */}
+        {/* Billed to + payment details */}
         <section className="mt-4 grid gap-4 border-b border-slate-200 pb-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)]">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -278,9 +262,7 @@ export default async function InvoicePage(props: PageProps) {
                     </td>
                     <td className="py-1 pr-2 text-right">{qty}</td>
                     <td className="py-1 pr-2 text-right">{inr(rate)}</td>
-                    <td className="py-1 pl-2 text-right">
-                      {inr(amount)}
-                    </td>
+                    <td className="py-1 pl-2 text-right">{inr(amount)}</td>
                   </tr>
                 );
               })}
@@ -290,7 +272,7 @@ export default async function InvoicePage(props: PageProps) {
 
         {/* Totals + notes */}
         <section className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          {/* Notes */}
+          {/* Notes (only if present) */}
           <div className="flex-1 text-[11px] text-slate-600 sm:text-xs">
             {hasNotes && (
               <>
@@ -331,6 +313,7 @@ export default async function InvoicePage(props: PageProps) {
                     {inr(t.taxableBase || 0)}
                   </td>
                 </tr>
+
                 {(t.cgst || 0) > 0 && (
                   <tr>
                     <td className="py-1 pr-2 text-slate-600">CGST</td>
@@ -378,7 +361,7 @@ export default async function InvoicePage(props: PageProps) {
           </div>
         </section>
 
-        {/* Footer */}
+        {/* Footer note */}
         <footer className="mt-6 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-500 print:text-[9px]">
           <div>
             Thank you for choosing {spaName}. Relax, refresh, rejuvenate.

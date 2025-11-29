@@ -414,6 +414,8 @@ aside {
 }
 
 /* ---------- PRINT RULES ---------- */
+/* ---------- PRINT RULES ---------- */
+
 @media print {
   @page {
     size: A4;
@@ -421,35 +423,28 @@ aside {
   }
 
   html,
-  body,
-  .app-shell,
-  .app-main,
-  main,
-  .invoice-shell {
-    background: #ffffff !important;
-  }
-
-  html,
   body {
+    background: #ffffff !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* Hide app chrome / buttons */
-  aside,
-  header,
+  /* hide app chrome – sidebar, top navbar, buttons, etc. */
+  .app-shell > aside,
+  .app-shell > header,
   .no-print {
     display: none !important;
   }
 
-  .app-shell {
-    grid-template-columns: minmax(0, 1fr) !important;
+  .app-main {
+    padding: 0 !important;
   }
 
   .invoice-shell {
     padding: 0 !important;
     margin: 0 !important;
     max-width: none !important;
+    background: #ffffff !important;
   }
 
   .invoice-print {
@@ -457,6 +452,6 @@ aside {
     border-radius: 0 !important;
     max-width: none !important;
     width: 100% !important;
-    padding: 0 !important; /* @page margins give the white border */
+    padding: 0 !important; /* A4 margins from @page handle spacing */
   }
 }

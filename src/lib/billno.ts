@@ -47,3 +47,62 @@ export async function nextBillNo(): Promise<string> {
   const padded = String(nextSeq).padStart(6, "0");
   return `${prefix}${padded}`;
 }
+
+// ─────────────────────────────────────────────
+// Admin counter helpers (simple in-memory stub)
+// These exist so /api/admin/reset & dev-reset can build.
+// They do NOT affect how `nextBillNo` currently works.
+// ─────────────────────────────────────────────
+
+export type BillCounterState = {
+  finYear: string; // e.g. "25-26"
+  nextSeq: number; // next running number (1-based)
+};
+
+let __bbCounterCache: BillCounterState | null = null;
+
+function deriveDefaultFinYear(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  // Indian FY: Apr–Mar
+  let startYear = year;
+  if (month < 4) startYear = year - 1;
+
+  const endYear = startYear + 1;
+  const yy = String(startYear).slice(-2);
+  const ny = String(endYear).slice(-2);
+  return `${yy}-${ny}`;
+}
+
+async function ensureCounter(): Promise<BillCounterState> {
+  if (!__bbCounterCache) {
+    __bbCounterCache = {
+      finYear: deriveDefaultFinYear(),
+      nextSeq: 1,
+    };
+  }
+  return __bbCounterCache;
+}
+
+// Used by /api/admin/reset
+export async function getCounter(): Promise<BillCounterState> {
+  return ensureCounter();
+}
+
+export async function setFinYear(finYear: string): Promise<void> {
+  const current = await ensureCounter();
+  __bbCounterCache = { ...current, finYear };
+}
+
+export async function setNextSeq(nextSeq: number): Promise<void> {
+  const current = await ensureCounter();
+  __bbCounterCache = { ...current, nextSeq };
+}
+
+export async function resetCounter(): Promise<void> {
+  // Reset to default FY & sequence 1
+  __bbCounterCache = null;
+  await ensureCounter();
+}
