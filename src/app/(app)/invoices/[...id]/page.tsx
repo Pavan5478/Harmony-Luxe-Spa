@@ -6,7 +6,8 @@ import { inr } from "@/lib/format";
 import InvoiceActions from "@/components/invoice/Actions";
 
 type PageProps = {
-  params: Promise<{ id: string[] }>;
+  // Next 16 passes these as Promises
+  params: Promise<{ id: string[] | string }>;
   searchParams?: Promise<{ print?: string }>;
 };
 
@@ -16,22 +17,27 @@ export default async function InvoicePage(props: PageProps) {
   const session = await getSession();
   if (!session.user) redirect("/login");
 
-  // Next 16: params / searchParams are Promises
-  const { id } = await props.params;
+  const params = await props.params;
   const sp = (await props.searchParams) || {};
   const autoPrint = sp.print === "1" || sp.print === "true";
 
-  // Only first segment is used (billNo or draft id)
-  const rawId = id?.[0] ?? "";
-  const key = decodeURIComponent(rawId);
+  // ── Robust key handling (works with encoded / and multi-segment URLs) ──
+  const idParam = params.id;
+  const segments = Array.isArray(idParam) ? idParam : [idParam];
+  const key = decodeURIComponent(segments.join("/")).trim();
 
   const bills = await listBills();
 
   const found =
-    bills.find((b: any) => String(b.billNo || "") === key) ||
-    bills.find((b: any) => String(b.id || "") === key);
+    bills.find((b: any) => String(b.billNo || "").trim() === key) ||
+    bills.find((b: any) => String(b.id || "").trim() === key);
 
   if (!found) {
+    // helpful in Vercel logs if something is wrong with data/env
+    console.error("Invoice not found in detail page", {
+      key,
+      billsCount: bills.length,
+    });
     notFound();
   }
 
@@ -88,7 +94,7 @@ export default async function InvoicePage(props: PageProps) {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
             Bill #{bill.billNo || bill.id}
           </h1>
-          <p className="mt-1 text-xs text-muted sm:text-sm text-foreground">
+          <p className="mt-1 text-xs text-muted text-foreground sm:text-sm">
             Official tax invoice. Use{" "}
             <span className="font-medium text-foreground">Print</span> or{" "}
             <span className="font-medium text-foreground">Save as PDF</span> for
@@ -256,9 +262,7 @@ export default async function InvoicePage(props: PageProps) {
                       )}
                     </td>
                     <td className="py-1 pr-2">
-                      {l.variant || (
-                        <span className="text-slate-400">—</span>
-                      )}
+                      {l.variant || <span className="text-slate-400">—</span>}
                     </td>
                     <td className="py-1 pr-2 text-right">{qty}</td>
                     <td className="py-1 pr-2 text-right">{inr(rate)}</td>
@@ -306,9 +310,7 @@ export default async function InvoicePage(props: PageProps) {
                 )}
 
                 <tr>
-                  <td className="py-1 pr-2 text-slate-600">
-                    Taxable value
-                  </td>
+                  <td className="py-1 pr-2 text-slate-600">Taxable value</td>
                   <td className="py-1 pl-2 text-right">
                     {inr(t.taxableBase || 0)}
                   </td>
@@ -340,9 +342,7 @@ export default async function InvoicePage(props: PageProps) {
                 )}
                 {(t.roundOff || 0) !== 0 && (
                   <tr>
-                    <td className="py-1 pr-2 text-slate-600">
-                      Round off
-                    </td>
+                    <td className="py-1 pr-2 text-slate-600">Round off</td>
                     <td className="py-1 pl-2 text-right">
                       {inr(t.roundOff || 0)}
                     </td>
