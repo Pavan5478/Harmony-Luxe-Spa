@@ -1,4 +1,5 @@
-﻿import { NextResponse } from "next/server";
+﻿// src/app/api/login/route.ts
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { authenticate } from "@/lib/users";
 import type { Role } from "@/types/billing";
@@ -15,12 +16,20 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+
     if (result.reason === "needs_setup") {
+      // <– this is what the login page is looking for
       return NextResponse.json(
-        { ok: false, message: "Password not set for this user (column C empty)." },
-        { status: 400 }
+        {
+          ok: false,
+          requirePasswordSetup: true,
+          message:
+            "Password not set for this user (column C empty). Please create one.",
+        },
+        { status: 409 }
       );
     }
+
     return NextResponse.json(
       { ok: false, message: "Invalid credentials" },
       { status: 401 }

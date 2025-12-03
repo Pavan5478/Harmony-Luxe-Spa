@@ -1376,7 +1376,7 @@ export default function ReportsClient({
             Reports
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-            XiphiasSpa analytics
+            Harmony Luxe analytics
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
             Insight across revenue, expenses and profit for{" "}

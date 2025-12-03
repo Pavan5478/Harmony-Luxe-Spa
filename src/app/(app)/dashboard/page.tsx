@@ -277,7 +277,7 @@ export default async function DashboardPage() {
             Overview
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-            XiphiasSpa control room
+            Harmony Luxe control room
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
             Live snapshot of{" "}

@@ -151,7 +151,7 @@ export default function Sidebar() {
         </div>
         <div className="flex flex-col leading-tight">
           <span className="text-sm font-semibold text-foreground">
-            XiphiasSpa
+            Harmony Luxe
           </span>
           <span className="text-[11px] text-muted">
             Billing &amp; reports

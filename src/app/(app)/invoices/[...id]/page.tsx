@@ -1,4 +1,4 @@
-﻿﻿// src/app/(app)/invoices/[...id]/page.tsx
+﻿﻿﻿// src/app/(app)/invoices/[...id]/page.tsx
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { listBills } from "@/store/bills";
@@ -59,14 +59,14 @@ export default async function InvoicePage(props: PageProps) {
   const idOrNo: string = (bill.billNo as string) || (bill.id as string) || key;
 
   // TODO: later load this from Settings sheet
-  const spaName = "XiphiasSpa";
+  const spaName = "Harmony Luxe";
   const spaAddress = [
     "123, Sample Street",
     "Some Area, City - 600001",
     "GSTIN: 33AAAAA0000A1Z5",
   ];
   const spaPhone = "+91 98765 43210";
-  const spaEmail = "info@xiphiaspa.com";
+  const spaEmail = "info@spa.com";
 
   const baseBadge =
     "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium";
@@ -129,7 +129,7 @@ export default async function InvoicePage(props: PageProps) {
       <div className="invoice-print">
         {/* Letterhead / logo section – always printed */}
         {/* NOTE: replace the XS block with your actual logo:
-             <img src="/logo-invoice.png" alt="XiphiasSpa" className="h-10 w-auto" />
+             <img src="/logo-invoice.png" alt="Harmony Luxe" className="h-10 w-auto" />
              Put the file under /public/logo-invoice.png
         */}
         <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">

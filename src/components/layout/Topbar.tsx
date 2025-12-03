@@ -182,7 +182,7 @@ export default function Topbar() {
               XS
             </div>
             <div className="hidden flex-col leading-tight sm:flex">
-              <span className="text-xs font-semibold">XiphiasSpa</span>
+              <span className="text-xs font-semibold">Harmony Luxe</span>
               <span className="text-[10px] text-muted">{currentLabel}</span>
             </div>
           </a>
@@ -277,7 +277,7 @@ export default function Topbar() {
                 </div>
                 <div className="flex flex-col leading-tight">
                   <span className="text-xs font-semibold text-foreground">
-                    XiphiasSpa
+                    Harmony Luxe
                   </span>
                   <span className="text-[10px] text-muted">
                     {roleLabel || "Staff"}
