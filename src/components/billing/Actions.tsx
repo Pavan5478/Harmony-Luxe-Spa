@@ -27,6 +27,9 @@ export default function BillingActions({
   const router = useRouter();
   const [loading, setLoading] =
     useState<null | "SAVE" | "FINAL" | "PREVIEW">(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(
+    null
+  );
 
   const isEditing = !!editKey;
   const isEditingDraft =
@@ -68,6 +71,9 @@ export default function BillingActions({
   async function handleSave() {
     if (disabled || saving || finalizing || previewing) return;
     setLoading("SAVE");
+    setStatusMessage(
+      "Saving draft… usually takes 1–2 seconds while we sync to Sheets."
+    );
     try {
       const id = await persistBill(editKey);
 
@@ -77,6 +83,9 @@ export default function BillingActions({
     } catch (e) {
       console.error("Save failed", e);
       alert("Failed to save. Please try again.");
+      setStatusMessage(
+        "Save failed. Please check your connection and try again."
+      );
     } finally {
       setLoading(null);
     }
@@ -93,6 +102,7 @@ export default function BillingActions({
     }
 
     setLoading("PREVIEW");
+    setStatusMessage("Opening preview…");
     try {
       const id = await persistBill(editKey);
       // Open draft invoice view (status = DRAFT)
@@ -100,6 +110,9 @@ export default function BillingActions({
     } catch (e) {
       console.error("Preview failed", e);
       alert("Failed to open preview. Please try again.");
+      setStatusMessage(
+        "Preview failed. Please check your connection and try again."
+      );
     } finally {
       setLoading(null);
     }
@@ -116,6 +129,9 @@ export default function BillingActions({
     }
 
     setLoading("FINAL");
+    setStatusMessage(
+      "Generating invoice… this can take a few seconds while Google Sheets updates."
+    );
     try {
       // 1) make sure latest changes are stored in a draft
       const draftId = await persistBill(editKey);
@@ -145,23 +161,26 @@ export default function BillingActions({
     } catch (e) {
       console.error("Finalize failed", e);
       alert("Failed to finalize invoice. Please try again.");
+      setStatusMessage(
+        "Finalize failed. Please check your connection and try again."
+      );
     } finally {
       setLoading(null);
     }
   }
 
   const saveLabel = (() => {
-    if (!isEditing) return saving ? "Saving draft..." : "Save draft";
+    if (!isEditing) return saving ? "Saving draft…" : "Save draft";
     if (isEditingFinal)
-      return saving ? "Saving changes..." : "Update invoice";
-    return saving ? "Updating draft..." : "Update draft";
+      return saving ? "Saving changes…" : "Update invoice";
+    return saving ? "Updating draft…" : "Update draft";
   })();
 
   const finalLabel = (() => {
     if (isEditingFinal) return "View invoice";
     if (!isEditing)
-      return finalizing ? "Generating invoice..." : "Generate invoice";
-    return finalizing ? "Finalizing..." : "Finalize invoice";
+      return finalizing ? "Generating invoice…" : "Generate invoice";
+    return finalizing ? "Finalizing…" : "Finalize invoice";
   })();
 
   const canPreviewButton = !isEditingFinal; // no preview button for FINAL
@@ -175,6 +194,11 @@ export default function BillingActions({
             type="button"
             onClick={handleSave}
             disabled={disabled || saving || finalizing || previewing}
+            title={
+              isEditing
+                ? "Update the draft with latest changes"
+                : "Save this bill as a draft"
+            }
             className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-card disabled:opacity-60"
           >
             {saveLabel}
@@ -187,9 +211,10 @@ export default function BillingActions({
             type="button"
             onClick={handlePreview}
             disabled={disabled || saving || finalizing || previewing}
+            title="Open a preview of the tax invoice layout"
             className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-card disabled:opacity-60"
           >
-            {previewing ? "Opening preview..." : "Preview invoice"}
+            {previewing ? "Opening preview…" : "Preview invoice"}
           </button>
         )}
 
@@ -198,22 +223,74 @@ export default function BillingActions({
           type="button"
           onClick={handleFinalize}
           disabled={disabled || finalizing || previewing}
+          title={
+            isEditingFinal
+              ? "Open the existing invoice"
+              : "Finalize the bill and generate tax invoice"
+          }
           className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
         >
+          <span className="mr-2 inline-flex h-4 w-4 items-center justify-center">
+            {finalizing ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                className="animate-spin"
+                aria-hidden
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  fill="none"
+                  opacity="0.3"
+                />
+                <path
+                  d="M21 12a9 9 0 0 0-9-9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              </svg>
+            ) : (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  d="M13 3 4 14h7l-1 7 9-11h-7l1-7Z"
+                  fill="currentColor"
+                />
+              </svg>
+            )}
+          </span>
           {finalLabel}
         </button>
       </div>
 
-      <p className="text-[11px] text-muted">
-        Draft bills are stored in Google Sheets with status{" "}
-        <span className="font-semibold">DRAFT</span>. You can use{" "}
-        <span className="font-semibold">Preview invoice</span> to see
-        the tax invoice layout before finalizing. When you click{" "}
-        <span className="font-semibold">Finalize / Generate invoice</span>, the
-        same row is updated to{" "}
-        <span className="font-semibold">FINAL</span> with a bill number,
-        and it starts appearing in the Invoices list and Reports.
-      </p>
+      <div className="space-y-1 text-[11px] text-muted">
+        <p>
+          Draft bills are stored in Google Sheets with status{" "}
+          <span className="font-semibold">DRAFT</span>. Use{" "}
+          <span className="font-semibold">Preview invoice</span> to
+          check layout before finalizing. When you click{" "}
+          <span className="font-semibold">
+            Finalize / Generate invoice
+          </span>
+          , the same row becomes{" "}
+          <span className="font-semibold">FINAL</span> with a bill
+          number and starts appearing in Invoices &amp; Reports.
+        </p>
+        {statusMessage && (
+          <p className="font-medium text-primary">{statusMessage}</p>
+        )}
+      </div>
     </div>
   );
 }

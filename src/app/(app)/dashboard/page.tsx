@@ -3,6 +3,8 @@ import { getSession } from "@/lib/session";
 import { listBills } from "@/store/bills";
 import { listExpenses } from "@/store/expenses";
 import RecentInvoices from "@/components/dashboard/RecentInvoices";
+import StatsRow from "@/components/dashboard/StatsRow";
+import ChartsRow from "@/components/dashboard/ChartsRow";
 import { inr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -79,12 +81,19 @@ export default async function DashboardPage() {
   });
   const todayLabel = startOfToday.toLocaleDateString();
 
+  const totalDaysInMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0
+  ).getDate();
+  const daysElapsedInMonth = Math.min(now.getDate(), totalDaysInMonth);
+
   // ─────────────────────────────────────
-  // Load bills + expenses from Sheets
+  // Load bills + expenses
   // ─────────────────────────────────────
   const [allBillsRaw, allExpensesRaw] = await Promise.all([
-    listBills(),       // from Invoices sheet
-    listExpenses(),    // from Expenses sheet
+    listBills(),
+    listExpenses(),
   ]);
 
   // ─────────────────────────────────────
@@ -100,14 +109,12 @@ export default async function DashboardPage() {
 
       const status = (b.status || "DRAFT") as BillStatus;
 
-      // Grand total – from totals.grandTotal (fallback to top-level)
       const totals = (b.totals || {}) as any;
       const grandTotal =
         Number(
           (b as any).grandTotal ?? totals.grandTotal ?? totals.total ?? 0
         ) || 0;
 
-      // customer name can be in customer.name or a top-level customerName
       const customerName =
         (b.customer?.name as string | undefined) ||
         (b.customerName as string | undefined) ||
@@ -155,6 +162,11 @@ export default async function DashboardPage() {
       ? ((monthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100
       : null;
 
+  const projectedRevenue =
+    daysElapsedInMonth > 0
+      ? (monthRevenue / daysElapsedInMonth) * totalDaysInMonth
+      : 0;
+
   // active customers this month (unique names)
   const activeCustomerNames = new Set<string>();
   for (const b of monthFinals) {
@@ -164,72 +176,6 @@ export default async function DashboardPage() {
 
   const finalizationRate =
     totalInvoices > 0 ? (finalCount / totalInvoices) * 100 : 0;
-
-  // Payment mix (this month, FINAL only)
-  const pmTotals: Record<string, number> = {
-    CASH: 0,
-    CARD: 0,
-    UPI: 0,
-    SPLIT: 0,
-    OTHER: 0,
-  };
-
-  for (const b of monthFinals) {
-    const mode = (b.paymentMode || "OTHER").toUpperCase();
-    const key =
-      mode === "CASH" || mode === "CARD" || mode === "UPI" || mode === "SPLIT"
-        ? mode
-        : "OTHER";
-    pmTotals[key] += b.grandTotal;
-  }
-
-  const pmTotalAmount = Object.values(pmTotals).reduce(
-    (s, v) => s + v,
-    0
-  );
-
-  const paymentMix = [
-    { key: "CASH", label: "Cash", color: "bg-emerald-500" },
-    { key: "CARD", label: "Card", color: "bg-sky-500" },
-    { key: "UPI", label: "UPI", color: "bg-fuchsia-500" },
-    { key: "SPLIT", label: "Split", color: "bg-amber-500" },
-    { key: "OTHER", label: "Other", color: "bg-slate-400" },
-  ].filter((x) => pmTotals[x.key] > 0);
-
-  const paymentSegments = (() => {
-    if (paymentMix.length === 0 || pmTotalAmount <= 0) return [];
-    let offset = 0;
-    return paymentMix.map((pm) => {
-      const value = pmTotals[pm.key];
-      const width = (value / pmTotalAmount) * 100;
-      const seg = { key: pm.key, color: pm.color, width, left: offset, value };
-      offset += width;
-      return seg;
-    });
-  })();
-
-  // Last 7 days revenue (FINAL)
-  const last7: { label: string; weekday: string; total: number }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-
-    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-
-    const total = finals
-      .filter((b) => b.date >= dayStart && b.date < dayEnd)
-      .reduce((s, b) => s + b.grandTotal, 0);
-
-    last7.push({
-      label: d.getDate().toString().padStart(2, "0"),
-      weekday: d.toLocaleDateString(undefined, { weekday: "short" }),
-      total,
-    });
-  }
-
-  const maxDayTotal = Math.max(...last7.map((d) => d.total), 0);
-  const weekTotal = last7.reduce((s, d) => s + d.total, 0);
 
   // ─────────────────────────────────────
   // Parse expenses
@@ -268,29 +214,152 @@ export default async function DashboardPage() {
   const monthProfit = monthRevenue - monthExpensesTotal;
   const todayProfit = todayRevenue - todayExpensesTotal;
 
+  const expenseCategoryTotals: Record<string, number> = {};
+  for (const e of monthExpenses) {
+    const cat = (e.category || "Misc").toString();
+    expenseCategoryTotals[cat] = (expenseCategoryTotals[cat] || 0) + e.amount;
+  }
+
+  const expenseCategoryData = Object.entries(expenseCategoryTotals)
+    .map(([category, total]) => ({
+      category,
+      total,
+      pct:
+        monthExpensesTotal > 0 ? (total / monthExpensesTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  // null = no revenue yet
+  const expenseRatio =
+    monthRevenue > 0 ? (monthExpensesTotal / monthRevenue) * 100 : null;
+
+  // Top customers this month
+  const topCustomers = (() => {
+    if (!monthFinals.length) return [];
+    const totals: Record<string, number> = {};
+    for (const b of monthFinals) {
+      const name = b.customerName || "Walk-in customer";
+      totals[name] = (totals[name] || 0) + b.grandTotal;
+    }
+    return Object.entries(totals)
+      .map(([name, total]) => ({
+        name,
+        total,
+        pct: monthRevenue > 0 ? (total / monthRevenue) * 100 : 0,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  })();
+
+  // ─────────────────────────────────────
+  // Payment mix (this month, FINAL only)
+  // ─────────────────────────────────────
+  const pmTotals: Record<string, number> = {
+    CASH: 0,
+    CARD: 0,
+    UPI: 0,
+    SPLIT: 0,
+    OTHER: 0,
+  };
+
+  for (const b of monthFinals) {
+    const mode = (b.paymentMode || "OTHER").toUpperCase();
+    const key =
+      mode === "CASH" || mode === "CARD" || mode === "UPI" || mode === "SPLIT"
+        ? mode
+        : "OTHER";
+    pmTotals[key] += b.grandTotal;
+  }
+
+  const pmTotalAmount = Object.values(pmTotals).reduce((s, v) => s + v, 0);
+
+  const paymentMix = [
+    { key: "CASH", label: "Cash", color: "bg-emerald-500" },
+    { key: "CARD", label: "Card", color: "bg-sky-500" },
+    { key: "UPI", label: "UPI", color: "bg-fuchsia-500" },
+    { key: "SPLIT", label: "Split", color: "bg-amber-500" },
+    { key: "OTHER", label: "Other", color: "bg-slate-400" },
+  ].filter((x) => pmTotals[x.key] > 0);
+
+  const paymentSegments = (() => {
+    if (paymentMix.length === 0 || pmTotalAmount <= 0) return [];
+    let offset = 0;
+    return paymentMix.map((pm) => {
+      const value = pmTotals[pm.key];
+      const width = (value / pmTotalAmount) * 100;
+      const seg = { key: pm.key, color: pm.color, width, left: offset, value };
+      offset += width;
+      return seg;
+    });
+  })();
+
+  // ─────────────────────────────────────
+  // Last 7 days revenue (FINAL) + net profit
+  // ─────────────────────────────────────
+  const last7: { label: string; weekday: string; total: number }[] = [];
+  const last7Net: {
+    label: string;
+    weekday: string;
+    revenue: number;
+    expenses: number;
+    net: number;
+  }[] = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+
+    const revenue = finals
+      .filter((b) => b.date >= dayStart && b.date < dayEnd)
+      .reduce((s, b) => s + b.grandTotal, 0);
+
+    const expenses = parsedExpenses
+      .filter((e) => e.date >= dayStart && e.date < dayEnd)
+      .reduce((s, e) => s + e.amount, 0);
+
+    const net = revenue - expenses;
+
+    const label = d.getDate().toString().padStart(2, "0");
+    const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
+
+    last7.push({ label, weekday, total: revenue });
+    last7Net.push({ label, weekday, revenue, expenses, net });
+  }
+
+  const maxDayTotal = Math.max(...last7.map((d) => d.total), 0);
+  const weekTotal = last7.reduce((s, d) => s + d.total, 0);
+
+  // ─────────────────────────────────────
+  // Layout
+  // ─────────────────────────────────────
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 pb-10 pt-4 sm:px-6 lg:px-10">
       {/* Header */}
-      <header className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <header className="flex flex-col gap-4 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-            Overview
+            Analytics
           </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-            Harmony Luxe control room
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            {roleLabel} analytics overview
           </h1>
-          <p className="mt-1 text-xs text-muted sm:text-sm">
+          <p className="text-xs text-muted sm:text-sm">
             Live snapshot of{" "}
-            <span className="font-medium text-foreground">{monthLabel}</span>{" "}
-            performance across invoices, expenses, and payments.
+            <span className="font-medium text-foreground">
+              {monthLabel}
+            </span>{" "}
+            revenue, profit, invoices, expenses and customers.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex max-w-xs items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] text-muted">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] text-muted">
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
               {roleLabel}
             </span>
-            <span className="max-w-[160px] truncate font-mono text-[10px] sm:max-w-[220px]">
+            <span className="max-w-[180px] truncate font-mono text-[10px] sm:max-w-[220px]">
               {userEmail || "Signed in"}
             </span>
           </div>
@@ -303,308 +372,361 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      <main className="space-y-6 lg:space-y-8">
-        {/* Top KPIs */}
-        <section className="grid gap-4 md:grid-cols-3">
-          {/* Today revenue */}
-          <div className="flex flex-col justify-between rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:px-5 sm:py-4">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                  Today revenue
-                </p>
-                <p className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
-                  {inr(todayRevenue)}
-                </p>
-                <p className="mt-1 text-[11px] text-muted">
-                  Final bills created since midnight.
-                </p>
-              </div>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
-                {todayCount} invoice{todayCount === 1 ? "" : "s"}
-              </span>
-            </div>
-            {role === "ADMIN" && (
-              <p className="mt-2 text-[11px] text-muted">
-                Today profit:{" "}
-                <span
-                  className={
-                    todayProfit >= 0
-                      ? "font-semibold text-emerald-600"
-                      : "font-semibold text-danger"
-                  }
-                >
-                  {inr(todayProfit)}
-                </span>{" "}
-                ({inr(todayExpensesTotal)} expenses)
-              </p>
-            )}
-          </div>
+      <main className="mt-5 space-y-6 lg:space-y-7">
+        {/* Row 1 – high-level KPIs */}
+        <StatsRow
+          monthRevenue={monthRevenue}
+          revenueChangePct={revenueChangePct}
+          monthInvoiceCount={monthInvoiceCount}
+          totalInvoices={totalInvoices}
+          finalCount={finalCount}
+          todayCount={todayCount}
+          avgBill={avgBill}
+          activeCustomers={activeCustomers}
+          finalizationRate={finalizationRate}
+          draftCount={draftCount}
+          voidCount={voidCount}
+          projectedRevenue={projectedRevenue}
+          expenseRatio={expenseRatio}
+        />
 
-          {/* This month revenue */}
-          <div className="flex flex-col justify-between rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:px-5 sm:py-4">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                  This month revenue
-                </p>
-                <p className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
-                  {inr(monthRevenue)}
-                </p>
-                <p className="mt-1 text-[11px] text-muted">
-                  {monthInvoiceCount} final invoice
-                  {monthInvoiceCount === 1 ? "" : "s"} this month.
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1 text-[10px]">
-                {revenueChangePct !== null ? (
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${
-                      revenueChangePct >= 0
-                        ? "bg-emerald-500/10 text-emerald-600"
-                        : "bg-danger/10 text-danger"
-                    }`}
-                  >
-                    {revenueChangePct >= 0 ? "↑" : "↓"}{" "}
-                    {Math.abs(revenueChangePct).toFixed(1)}%
-                  </span>
-                ) : (
-                  <span className="inline-flex rounded-full bg-muted/40 px-2 py-0.5 text-muted">
-                    No last month data
-                  </span>
-                )}
-                <span className="text-muted">
-                  vs previous month revenue
-                </span>
-              </div>
-            </div>
-          </div>
+        {/* Row 2 – revenue trend + payment mix + profit */}
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)] lg:items-start">
+          <ChartsRow
+            last7={last7}
+            maxDayTotal={maxDayTotal}
+            weekTotal={weekTotal}
+            paymentMix={paymentMix}
+            paymentSegments={paymentSegments}
+            pmTotals={pmTotals}
+            pmTotalAmount={pmTotalAmount}
+          />
 
-          {/* Average bill & status */}
-          <div className="flex flex-col justify-between rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:px-5 sm:py-4">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                Average bill
-              </p>
-              <p className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
-                {inr(avgBill)}
-              </p>
-              <p className="mt-1 text-[11px] text-muted">
-                Per finalized invoice • {activeCustomers} active customers
-                this month.
-              </p>
-            </div>
-
-            <div className="mt-3 space-y-2 text-[11px] text-muted">
-              <div className="flex items-center justify-between gap-2">
-                <span>Finalization rate</span>
-                <span className="font-medium text-foreground">
-                  {finalizationRate.toFixed(1)}%
-                </span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/30">
-                <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{
-                    width: `${Math.min(finalizationRate, 100).toFixed(1)}%`,
-                  }}
-                />
-              </div>
-              <div className="grid gap-2 pt-1 sm:grid-cols-3">
-                <div>
-                  <span className="text-muted">Final</span>
-                  <div className="font-semibold text-foreground">
-                    {finalCount}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted">Draft</span>
-                  <div className="font-semibold text-foreground">
-                    {draftCount}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted">Void</span>
-                  <div className="font-semibold text-foreground">
-                    {voidCount}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ProfitAnalyticsCard
+            monthLabel={monthLabel}
+            monthProfit={monthProfit}
+            monthRevenue={monthRevenue}
+            monthExpensesTotal={monthExpensesTotal}
+            todayProfit={todayProfit}
+            todayExpensesTotal={todayExpensesTotal}
+            data={last7Net}
+          />
         </section>
 
-        {/* Middle row: last 7 days + payment mix & quick actions & profit (admin) */}
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)]">
-          {/* Last 7 days chart */}
-          <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground sm:text-base">
-                  Last 7 days revenue
-                </h2>
-                <p className="mt-1 text-[11px] text-muted sm:text-xs">
-                  Daily totals from finalized invoices.
-                </p>
-              </div>
-              <div className="text-right text-[11px] text-muted">
-                <div className="text-xs font-medium text-foreground">
-                  {inr(weekTotal)}
-                </div>
-                <div>Total for last 7 days</div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-end gap-2">
-              {last7.map((d) => {
-                const pct =
-                  maxDayTotal > 0 ? (d.total / maxDayTotal) * 100 : 0;
-                const barHeight = pct === 0 ? 4 : pct;
-                return (
-                  <div key={d.label} className="flex-1 text-center">
-                    <div className="flex h-28 w-full items-end justify-center rounded-full bg-muted/20">
-                      <div
-                        className="w-3 rounded-full bg-primary sm:w-4"
-                        style={{ height: `${barHeight}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted">
-                      <div>{d.weekday.slice(0, 2)}</div>
-                      <div>{d.label}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Right column: profit (admin) + payment mix + quick actions */}
-          <div className="space-y-4">
-            {role === "ADMIN" && (
-              <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
-                <h2 className="text-sm font-semibold text-foreground sm:text-base">
-                  This month profit
-                </h2>
-                <p className="mt-1 text-[11px] text-muted sm:text-xs">
-                  Revenue minus recorded expenses for{" "}
-                  {monthLabel}.
-                </p>
-
-                <div className="mt-3 flex items-baseline justify-between gap-2">
-                  <div>
-                    <p className="text-[11px] text-muted">Net profit</p>
-                    <p
-                      className={`mt-1 text-xl font-semibold tracking-tight sm:text-2xl ${
-                        monthProfit >= 0
-                          ? "text-emerald-600"
-                          : "text-danger"
-                      }`}
-                    >
-                      {inr(monthProfit)}
-                    </p>
-                  </div>
-                  <div className="text-right text-[11px] text-muted">
-                    <div>
-                      Revenue:{" "}
-                      <span className="font-medium text-foreground">
-                        {inr(monthRevenue)}
-                      </span>
-                    </div>
-                    <div>
-                      Expenses:{" "}
-                      <span className="font-medium text-foreground">
-                        {inr(monthExpensesTotal)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Payment mix */}
-            <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
-              <h2 className="text-sm font-semibold text-foreground sm:text-base">
-                Payment mix (this month)
-              </h2>
-              <p className="mt-1 text-[11px] text-muted sm:text-xs">
-                Distribution by payment mode for finalized invoices in{" "}
-                {monthLabel}.
-              </p>
-
-              {pmTotalAmount > 0 && paymentMix.length > 0 ? (
-                <>
-                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted/20">
-                    {paymentSegments.map((seg) => (
-                      <div
-                        key={seg.key}
-                        className={seg.color + " h-full"}
-                        style={{ width: `${seg.width}%` }}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-2">
-                    {paymentMix.map((pm) => {
-                      const amount = pmTotals[pm.key] || 0;
-                      const pct =
-                        pmTotalAmount > 0
-                          ? (amount / pmTotalAmount) * 100
-                          : 0;
-                      return (
-                        <div
-                          key={pm.key}
-                          className="flex items-center justify-between gap-2"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`h-2 w-2 rounded-full ${pm.color}`}
-                            />
-                            <span className="font-medium text-foreground">
-                              {pm.label}
-                            </span>
-                          </div>
-                          <div className="text-right text-muted">
-                            <div>{inr(amount)}</div>
-                            <div>{pct.toFixed(0)}%</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <p className="mt-3 text-[11px] text-muted">
-                  No finalized invoices for this month yet.
-                </p>
-              )}
-            </section>
-
-            {/* Quick actions */}
-            <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
-              <h2 className="text-sm font-semibold text-foreground sm:text-base">
-                Quick actions
-              </h2>
-              <p className="mt-1 text-[11px] text-muted sm:text-xs">
-                Jump into common workflows.
-              </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {cards.map((card) => (
-                  <a
-                    key={card.href}
-                    href={card.href}
-                    className="inline-flex items-center justify-center rounded-full border border-border bg-background px-3 py-2 text-xs font-medium text-foreground shadow-sm hover:bg-card"
-                  >
-                    {card.title}
-                  </a>
-                ))}
-              </div>
-            </section>
-          </div>
+        {/* Row 3 – deeper insights */}
+        <section className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <ExpensesByCategoryCard
+            monthLabel={monthLabel}
+            data={expenseCategoryData}
+            expenseRatio={expenseRatio}
+          />
+          <TopCustomersCard
+            data={topCustomers}
+            monthRevenue={monthRevenue}
+            cards={cards}
+          />
         </section>
 
-        {/* Recent invoices list */}
+        {/* Row 4 – recent invoices */}
         <RecentInvoices />
       </main>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────
+// Local cards & charts
+// ─────────────────────────────────────
+
+type NetPoint = {
+  label: string;
+  weekday: string;
+  revenue: number;
+  expenses: number;
+  net: number;
+};
+
+function ProfitAnalyticsCard({
+  monthLabel,
+  monthProfit,
+  monthRevenue,
+  monthExpensesTotal,
+  todayProfit,
+  todayExpensesTotal,
+  data,
+}: {
+  monthLabel: string;
+  monthProfit: number;
+  monthRevenue: number;
+  monthExpensesTotal: number;
+  todayProfit: number;
+  todayExpensesTotal: number;
+  data: NetPoint[];
+}) {
+  return (
+    <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground sm:text-base">
+          Profit &amp; cash flow
+        </h2>
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+          {monthLabel}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-muted sm:text-xs">
+        Net profit this month and last 7 days trend after expenses.
+      </p>
+
+      <div className="mt-3 flex items-baseline justify-between gap-2">
+        <div>
+          <p className="text-[11px] text-muted">Month profit</p>
+          <p
+            className={`mt-1 text-xl font-semibold tracking-tight sm:text-2xl ${
+              monthProfit >= 0 ? "text-emerald-500" : "text-danger"
+            }`}
+          >
+            {inr(monthProfit)}
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            Today:{" "}
+            <span
+              className={
+                todayProfit >= 0
+                  ? "font-medium text-emerald-500"
+                  : "font-medium text-danger"
+              }
+            >
+              {inr(todayProfit)}
+            </span>{" "}
+            ({inr(todayExpensesTotal)} expenses)
+          </p>
+        </div>
+        <div className="text-right text-[11px] text-muted">
+          <div>
+            Revenue:{" "}
+            <span className="font-medium text-foreground">
+              {inr(monthRevenue)}
+            </span>
+          </div>
+          <div>
+            Expenses:{" "}
+            <span className="font-medium text-foreground">
+              {inr(monthExpensesTotal)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <Last7NetProfitChart data={data} />
+    </section>
+  );
+}
+
+function ExpensesByCategoryCard({
+  monthLabel,
+  data,
+  expenseRatio,
+}: {
+  monthLabel: string;
+  data: { category: string; total: number; pct: number }[];
+  expenseRatio: number | null;
+}) {
+  return (
+    <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground sm:text-base">
+          Expenses by category
+        </h2>
+        <span className="text-[11px] text-muted">{monthLabel}</span>
+      </div>
+      <p className="mt-1 text-[11px] text-muted sm:text-xs">
+        Where your money is going, grouped by expense category.
+      </p>
+
+      <p className="mt-2 text-[11px] text-muted">
+        {expenseRatio === null ? (
+          <>No revenue recorded yet this month.</>
+        ) : (
+          <>
+            Expenses are{" "}
+            <span className="font-medium text-foreground">
+              {expenseRatio.toFixed(1)}%
+            </span>{" "}
+            of revenue this month.
+          </>
+        )}
+      </p>
+
+      <ExpenseCategoryChart data={data} />
+    </section>
+  );
+}
+
+function TopCustomersCard({
+  data,
+  monthRevenue,
+  cards,
+}: {
+  data: { name: string; total: number; pct: number }[];
+  monthRevenue: number;
+  cards: { title: string; href: string }[];
+}) {
+  const primaryCta = cards[0];
+  const ctaLabel = primaryCta?.title ?? "Open";
+
+  return (
+    <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground sm:text-base">
+          Top customers this month
+        </h2>
+        {primaryCta && (
+          <a
+            href={primaryCta.href}
+            className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-card"
+          >
+            {ctaLabel}
+          </a>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-muted sm:text-xs">
+        Highest-spending customers on finalized invoices.
+      </p>
+
+      {data.length === 0 ? (
+        <p className="mt-3 text-[11px] text-muted">
+          No finalized invoices with customer names this month yet.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2 text-xs">
+          {data.map((c) => (
+            <li
+              key={c.name}
+              className="flex items-center justify-between gap-2 rounded-xl bg-background px-2.5 py-1.5"
+            >
+              <div className="flex flex-col">
+                <span className="truncate font-medium text-foreground">
+                  {c.name}
+                </span>
+                <span className="text-[11px] text-muted">
+                  {c.pct.toFixed(1)}% of revenue
+                </span>
+              </div>
+              <span className="text-sm font-medium">
+                {inr(c.total)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {monthRevenue > 0 && data.length > 0 && (
+        <p className="mt-3 text-[10px] text-muted">
+          These customers drive a big share of revenue — focus on
+          retention and upsell here.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Last7NetProfitChart({ data }: { data: NetPoint[] }) {
+  const maxAbsNet = Math.max(0, ...data.map((d) => Math.abs(d.net)));
+
+  if (!data.length || maxAbsNet <= 0) {
+    return (
+      <p className="mt-3 text-[11px] text-muted">
+        Not enough data to show profit trend yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="flex h-28 items-end gap-2">
+        {data.map((d) => {
+          const ratio = maxAbsNet > 0 ? Math.abs(d.net) / maxAbsNet : 0;
+          const height = 15 + ratio * 70; // 15–85%
+          const isPositive = d.net >= 0;
+
+          return (
+            <div
+              key={d.label + d.weekday}
+              className="flex flex-1 flex-col items-center gap-1"
+            >
+              <div className="flex h-full w-full items-end justify-center rounded-full bg-muted/20">
+                <div
+                  className={`w-3 rounded-full sm:w-4 ${
+                    isPositive ? "bg-emerald-500" : "bg-danger"
+                  }`}
+                  style={{ height: `${height}%` }}
+                />
+              </div>
+              <div className="mt-1 text-center text-[10px] leading-tight text-muted">
+                <div className="font-medium text-foreground">
+                  {d.weekday.slice(0, 2)}
+                </div>
+                <div>{d.label}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex justify-center gap-4 text-[10px] text-muted">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Profit
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-danger" />
+          Loss
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseCategoryChart({
+  data,
+}: {
+  data: { category: string; total: number; pct: number }[];
+}) {
+  if (!data.length) {
+    return (
+      <p className="mt-3 text-[11px] text-muted">
+        No expenses recorded for this month yet.
+      </p>
+    );
+  }
+
+  const top = data.slice(0, 5);
+
+  return (
+    <div className="mt-3 space-y-3">
+      {top.map((item) => (
+        <div key={item.category} className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-muted">
+            <span className="truncate">{item.category}</span>
+            <span className="font-medium text-foreground">
+              {item.pct.toFixed(0)}%
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/20">
+            <div
+              className="h-full rounded-full bg-sky-500"
+              style={{ width: `${item.pct}%` }}
+            />
+          </div>
+          <div className="text-[10px] text-muted">
+            {inr(item.total)} this month
+          </div>
+        </div>
+      ))}
+      {data.length > top.length && (
+        <p className="pt-1 text-[10px] text-muted">
+          +{data.length - top.length} more categories
+        </p>
+      )}
     </div>
   );
 }

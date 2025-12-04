@@ -1,5 +1,4 @@
-﻿// src/components/billing/PaymentCard.tsx
-"use client";
+﻿"use client";
 
 type Split = { cash?: number; card?: number; upi?: number };
 
@@ -24,7 +23,7 @@ export default function PaymentCard({
 
   return (
     <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <h2 className="mb-3 text-sm font-semibold text-foreground sm:text-base">
+      <h2 className="mb-2 text-sm font-semibold text-foreground sm:text-base">
         Payment
       </h2>
 
@@ -90,7 +89,10 @@ export default function PaymentCard({
           </div>
 
           <p className="text-[11px] text-muted">
-            Split total: <span className="font-medium">₹{sum.toFixed(2)}</span>{" "}
+            Split total:{" "}
+            <span className="font-medium">
+              ₹{sum.toFixed(2)}
+            </span>{" "}
             / Expected:{" "}
             <span className="font-medium">
               ₹{expectedTotal.toFixed(2)}
@@ -101,8 +103,7 @@ export default function PaymentCard({
 
       {mismatch && (
         <p className="mt-2 text-[11px] text-danger">
-          Split total must equal grand total. Please adjust the
-          amounts.
+          Split total must equal grand total. Adjust the amounts.
         </p>
       )}
     </section>

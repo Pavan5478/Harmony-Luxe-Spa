@@ -9,12 +9,24 @@ import {
   MouseEvent as ReactMouseEvent,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { inr } from "@/lib/format";
 
 type Role = "ADMIN" | "CASHIER" | "ACCOUNTS" | null;
 
 type NavLink = {
   href: string;
   label: string;
+};
+
+type InvoiceStats = {
+  todayCount: number;
+  todayAmount: number;
+  yesterdayCount: number;
+  yesterdayAmount: number;
+  weekCount: number;
+  weekAmount: number;
+  draftCount: number;
+  draftAmount: number;
 };
 
 export default function Topbar() {
@@ -26,7 +38,12 @@ export default function Topbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
+  const [todayLabel, setTodayLabel] = useState("");
+  const [invoiceStats, setInvoiceStats] = useState<InvoiceStats | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const statsRef = useRef<HTMLDivElement | null>(null);
 
   // fetch identity
   useEffect(() => {
@@ -40,6 +57,106 @@ export default function Topbar() {
         // ignore
       }
     })();
+  }, []);
+
+  // fetch recent invoices for topbar stats
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/invoices/recent", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        const items = (j.items ?? []) as {
+          billNo?: string;
+          id?: string;
+          dateISO?: string;
+          grandTotal?: number;
+        }[];
+
+        const now = new Date();
+        const startToday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+        const startTomorrow = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + 1
+        );
+        const startYesterday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 1
+        );
+        const startWeek = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 6
+        ); // last 7 days including today
+
+        let todayCount = 0;
+        let todayAmount = 0;
+        let yesterdayCount = 0;
+        let yesterdayAmount = 0;
+        let weekCount = 0;
+        let weekAmount = 0;
+        let draftCount = 0;
+        let draftAmount = 0;
+
+        for (const it of items) {
+          if (!it.dateISO) continue;
+          const d = new Date(it.dateISO);
+          if (Number.isNaN(d.getTime())) continue;
+
+          const amount = Number(it.grandTotal ?? 0) || 0;
+          const isDraft = !it.billNo && !!it.id;
+
+          if (isDraft) {
+            draftCount += 1;
+            draftAmount += amount;
+          }
+
+          if (d >= startToday && d < startTomorrow) {
+            todayCount += 1;
+            todayAmount += amount;
+          } else if (d >= startYesterday && d < startToday) {
+            yesterdayCount += 1;
+            yesterdayAmount += amount;
+          }
+
+          if (d >= startWeek && d < startTomorrow) {
+            weekCount += 1;
+            weekAmount += amount;
+          }
+        }
+
+        setInvoiceStats({
+          todayCount,
+          todayAmount,
+          yesterdayCount,
+          yesterdayAmount,
+          weekCount,
+          weekAmount,
+          draftCount,
+          draftAmount,
+        });
+      } catch {
+        // ignore – topbar still works without stats
+      }
+    })();
+  }, []);
+
+  // today label
+  useEffect(() => {
+    const d = new Date();
+    setTodayLabel(
+      d.toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+      })
+    );
   }, []);
 
   // init theme from localStorage / system
@@ -98,6 +215,21 @@ export default function Topbar() {
     }
   }
 
+  // close stats popover when clicking outside
+  useEffect(() => {
+    if (!statsOpen) return;
+
+    function handleClick(e: MouseEvent) {
+      if (!statsRef.current) return;
+      if (!statsRef.current.contains(e.target as Node)) {
+        setStatsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [statsOpen]);
+
   // Links for mobile menu based on role
   const navLinks: NavLink[] = useMemo(() => {
     if (role === "ADMIN") {
@@ -153,9 +285,9 @@ export default function Topbar() {
 
   return (
     <header className="no-print sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-3 sm:h-16 sm:px-4 lg:px-0">
+      <div className="mx-auto flex h-14 max-w-7xl items-center px-3 sm:h-16 sm:px-4 lg:px-6">
         {/* Left: mobile menu + brand */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2">
           {/* Mobile menu button */}
           <button
             type="button"
@@ -188,8 +320,193 @@ export default function Topbar() {
           </a>
         </div>
 
+        {/* Center: date + invoice pulse (desktop) */}
+        <div className="hidden flex-1 items-center justify-center md:flex">
+          <div
+            ref={statsRef}
+            className="relative"
+          >
+            <button
+              type="button"
+              onClick={() => setStatsOpen((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] text-muted shadow-sm hover:border-primary/40 hover:text-foreground"
+            >
+              <span className="inline-flex items-center gap-1">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                  className="text-primary"
+                >
+                  <path
+                    d="M4 5h16M5 3v4M19 3v4M5 21h14a1 1 0 0 0 1-1V8H4v12a1 1 0 0 0 1 1Z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="font-medium text-foreground">
+                  {todayLabel || "Today"}
+                </span>
+              </span>
+
+              {invoiceStats && (
+                <>
+                  <span className="h-3 w-px bg-border" aria-hidden />
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {invoiceStats.todayCount} today
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                    {invoiceStats.yesterdayCount} yesterday
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    {invoiceStats.draftCount} drafts
+                  </span>
+                </>
+              )}
+
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                aria-hidden
+                className={`transition-transform ${
+                  statsOpen ? "rotate-180" : ""
+                }`}
+              >
+                <path
+                  d="M7 10l5 5 5-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+
+            {/* Popover with detailed stats */}
+            {statsOpen && (
+              <div className="absolute left-1/2 z-50 mt-2 w-80 -translate-x-1/2 rounded-2xl border border-border bg-card p-3 text-[11px] text-muted shadow-lg">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-medium text-foreground">
+                    Invoice activity
+                  </span>
+                  <span className="text-[10px] text-muted">
+                    Last 7 days snapshot
+                  </span>
+                </div>
+
+                {invoiceStats ? (
+                  <div className="space-y-2">
+                    {/* Today / Yesterday */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href="/invoices?range=today"
+                        className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Today
+                          </span>
+                          <span className="text-[10px] text-muted">
+                            {invoiceStats.todayCount} inv
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs font-semibold text-foreground">
+                          {inr(invoiceStats.todayAmount)}
+                        </div>
+                      </a>
+
+                      <a
+                        href="/invoices?range=yesterday"
+                        className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                            Yesterday
+                          </span>
+                          <span className="text-[10px] text-muted">
+                            {invoiceStats.yesterdayCount} inv
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs font-semibold text-foreground">
+                          {inr(invoiceStats.yesterdayAmount)}
+                        </div>
+                      </a>
+                    </div>
+
+                    {/* Last 7 days / Drafts */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href="/invoices?range=last7"
+                        className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                            Last 7 days
+                          </span>
+                          <span className="text-[10px] text-muted">
+                            {invoiceStats.weekCount} inv
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs font-semibold text-foreground">
+                          {inr(invoiceStats.weekAmount)}
+                        </div>
+                      </a>
+
+                      <a
+                        href="/invoices?status=draft"
+                        className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            Drafts
+                          </span>
+                          <span className="text-[10px] text-muted">
+                            {invoiceStats.draftCount} inv
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs font-semibold text-foreground">
+                          {inr(invoiceStats.draftAmount)}
+                        </div>
+                      </a>
+                    </div>
+
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-muted">
+                      <span>
+                        Click a card to open the Invoices screen with that
+                        focus.
+                      </span>
+                      <a
+                        href="/invoices"
+                        className="text-[10px] font-medium text-primary hover:underline"
+                      >
+                        View all
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-3 text-[11px] text-muted">
+                    Loading invoice activity…
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Right: theme toggle + user */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center justify-end gap-2">
           {/* Theme toggle */}
           <button
             type="button"

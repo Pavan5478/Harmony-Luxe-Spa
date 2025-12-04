@@ -1,11 +1,7 @@
 // src/components/invoice/DeleteButton.tsx
 "use client";
 
-export default function DeleteButton({
-  idOrNo,
-}: {
-  idOrNo: string;
-}) {
+export default function DeleteButton({ idOrNo }: { idOrNo: string }) {
   async function onDelete() {
     if (
       !confirm(
@@ -13,12 +9,16 @@ export default function DeleteButton({
       )
     )
       return;
-    const res = await fetch(
-      `/api/bills/${encodeURIComponent(idOrNo)}`,
-      { method: "DELETE" }
-    );
-    if (res.ok) location.reload();
-    else alert("Failed to delete");
+
+    const res = await fetch(`/api/bills/${encodeURIComponent(idOrNo)}`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      location.reload();
+    } else {
+      alert("Failed to delete");
+    }
   }
 
   return (

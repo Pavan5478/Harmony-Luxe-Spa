@@ -35,68 +35,105 @@ export default function TrendsCard({
   pmTotals,
   pmTotalAmount,
 }: Props) {
+  const daysCount = last7.length || 1;
+  const avgPerDay = weekTotal / daysCount;
+
   return (
     <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
-      <div className="flex items-start justify-between gap-2">
+      {/* Header / summary */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground sm:text-base">
-            Last 7 days revenue
-          </h2>
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
+            Revenue overview
+          </p>
+          <div className="mt-1 flex flex-wrap items-baseline gap-2">
+            <span className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+              {inr(weekTotal)}
+            </span>
+            <span className="text-[11px] text-muted">last 7 days</span>
+          </div>
           <p className="mt-1 text-[11px] text-muted sm:text-xs">
             Finalized invoices only. Each bar shows total grand amount per day.
           </p>
         </div>
-        <div className="text-right text-[11px] text-muted sm:text-xs">
-          <div className="font-semibold text-foreground">
-            {inr(weekTotal)}
+
+        <div className="flex flex-col items-end gap-1 text-[11px] text-muted">
+          <div className="flex items-baseline gap-3">
+            <div className="text-right">
+              <p className="text-[11px] text-muted">avg / day</p>
+              <p className="text-xs font-semibold text-foreground">
+                {inr(avgPerDay || 0)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] text-muted">best day</p>
+              <p className="text-xs font-semibold text-foreground">
+                {inr(maxDayTotal || 0)}
+              </p>
+            </div>
           </div>
-          <div>Last 7 days</div>
         </div>
       </div>
 
-      {/* Mini bar chart */}
-      <div className="mt-4 flex h-32 items-end gap-2">
-        {last7.map((d) => {
-          const baseHeight =
-            maxDayTotal > 0 ? (d.total / maxDayTotal) * 60 : 0;
-          const heightPct = 20 + baseHeight; // 20–80%
+      {/* 7-day bar chart */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-[11px] text-muted">
+          <span>Last 7 days</span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-full bg-primary/80" />
+            Daily total
+          </span>
+        </div>
 
-          return (
-            <div
-              key={d.label}
-              className="flex flex-1 flex-col items-center gap-1"
-            >
-              <div className="flex h-full w-full items-end">
-                <div className="relative w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="w-full rounded-full bg-primary/25"
-                    style={{ height: `${heightPct}%` }}
-                  >
-                    <div className="h-full w-full rounded-full bg-primary/80" />
+        <div className="mt-2 flex h-24 items-end gap-2 sm:h-28">
+          {last7.map((d) => {
+            const ratio = maxDayTotal > 0 ? d.total / maxDayTotal : 0;
+            const barHeight = Math.max(ratio * 100, d.total > 0 ? 18 : 0);
+
+            return (
+              <div
+                key={d.label}
+                className="flex flex-1 flex-col items-center gap-1"
+              >
+                <div className="flex h-full w-full items-end justify-center">
+                  <div className="flex h-full w-5 items-end justify-center rounded-full bg-muted/15 sm:w-6">
+                    <div
+                      className="w-full rounded-full bg-primary"
+                      style={{ height: `${barHeight}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-1 text-center text-[10px] leading-tight text-muted">
+                  <div className="font-medium text-foreground">
+                    {d.weekday.slice(0, 3)}
+                  </div>
+                  <div>
+                    {d.total > 0 ? `₹${d.total.toFixed(0)}` : "—"}
                   </div>
                 </div>
               </div>
-              <div className="mt-1 text-[10px] leading-tight text-muted">
-                <div>{d.weekday}</div>
-                <div className="font-medium text-foreground">
-                  {d.total > 0 ? `₹${d.total.toFixed(0)}` : "—"}
-                </div>
-              </div>
+            );
+          })}
+
+          {last7.length === 0 && (
+            <div className="flex h-full w-full items-center justify-center text-[11px] text-muted">
+              No revenue data for the last 7 days.
             </div>
-          );
-        })}
+          )}
+        </div>
       </div>
 
       {/* Payment mix */}
       {paymentMix.length > 0 && (
-        <div className="mt-5 space-y-2">
+        <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between text-[11px] text-muted">
             <span>Payment mix (this month)</span>
             <span className="font-medium text-foreground">
               {inr(pmTotalAmount)}
             </span>
           </div>
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100">
+
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/30">
             {paymentSegments.map((seg) => (
               <div
                 key={seg.key}
@@ -108,12 +145,13 @@ export default function TrendsCard({
               />
             ))}
           </div>
+
           <div className="flex flex-wrap gap-2 text-[11px] text-muted">
             {paymentMix.map((pm) => {
+              const total = pmTotals[pm.key] ?? 0;
               const pct =
-                pmTotalAmount > 0
-                  ? (pmTotals[pm.key] / pmTotalAmount) * 100
-                  : 0;
+                pmTotalAmount > 0 ? (total / pmTotalAmount) * 100 : 0;
+
               return (
                 <span
                   key={pm.key}

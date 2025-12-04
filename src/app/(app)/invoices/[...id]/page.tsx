@@ -1,4 +1,4 @@
-﻿﻿﻿// src/app/(app)/invoices/[...id]/page.tsx
+﻿﻿// src/app/(app)/invoices/[...id]/page.tsx
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { listBills } from "@/store/bills";
@@ -33,7 +33,6 @@ export default async function InvoicePage(props: PageProps) {
     bills.find((b: any) => String(b.id || "").trim() === key);
 
   if (!found) {
-    // helpful in Vercel logs if something is wrong with data/env
     console.error("Invoice not found in detail page", {
       key,
       billsCount: bills.length,
@@ -68,75 +67,88 @@ export default async function InvoicePage(props: PageProps) {
   const spaPhone = "+91 98765 43210";
   const spaEmail = "info@spa.com";
 
+  // status chip (screen only, not printed)
   const baseBadge =
     "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium";
   let statusClass = "";
   let statusLabel = "";
   if (status === "FINAL") {
-    statusClass = `${baseBadge} bg-emerald-50 text-emerald-700 border border-emerald-100`;
+    statusClass = `${baseBadge} bg-emerald-500/10 text-emerald-300 border border-emerald-500/30`;
     statusLabel = "Final";
   } else if (status === "VOID") {
-    statusClass = `${baseBadge} bg-danger/5 text-danger border border-danger/30`;
+    statusClass = `${baseBadge} bg-danger/10 text-danger border border-danger/40`;
     statusLabel = "Void";
   } else {
-    statusClass = `${baseBadge} bg-amber-50 text-amber-800 border border-amber-100`;
+    statusClass = `${baseBadge} bg-amber-500/10 text-amber-300 border border-amber-500/30`;
     statusLabel = "Draft";
   }
 
   return (
-    <div className="invoice-shell mx-auto max-w-5xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
-      {/* ── Top header (screen only) ─────────────────────────────── */}
-      <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-            Invoice
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Bill #{bill.billNo || bill.id}
-          </h1>
-          <p className="mt-1 text-xs text-muted text-foreground sm:text-sm">
-            Official tax invoice. Use{" "}
-            <span className="font-medium text-foreground">Print</span> or{" "}
-            <span className="font-medium text-foreground">Save as PDF</span> for
-            an A4 copy.
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2 text-right text-[11px] text-muted sm:text-xs">
-          <span className={statusClass}>
-            <span className="h-1.5 w-1.5 rounded-full bg-current text-foreground" />
-            {statusLabel}
-          </span>
-          <a
-            href="/invoices"
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-background"
-          >
-            ← Back to invoices
-          </a>
-        </div>
-      </div>
+    <div className="invoice-shell mx-auto max-w-5xl px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+      {/* ── Screen header (not printed) ─────────────────────────── */}
+      <header className="no-print mb-4">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+              Invoice
+            </p>
+            <h1 className="mt-1 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+              Bill #{bill.billNo || bill.id}
+            </h1>
+            <p className="mt-1 text-[11px] text-muted sm:text-xs">
+              Official tax invoice. Use{" "}
+              <span className="font-medium text-foreground">Print</span> or{" "}
+              <span className="font-medium text-foreground">Save as PDF</span>{" "}
+              for a clean A4 copy.
+            </p>
+          </div>
 
-      {/* ── Action bar (screen only) ─────────────────────────────── */}
-      <div className="no-print mb-4 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:px-5">
-        <InvoiceActions
-          idOrNo={idOrNo}
-          printedAt={printedAt}
-          status={status}
-          autoPrint={autoPrint && status === "FINAL"}
-        />
-      </div>
+          <div className="flex flex-col items-end gap-2 text-right text-[11px] text-muted sm:text-xs">
+            <span className={statusClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {statusLabel}
+            </span>
+            <span className="rounded-full border border-border bg-background/70 px-3 py-1.5 text-[11px] text-foreground">
+              {billDate.toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+      </header>
 
-      {/* ── Printable A4 invoice (white) ─────────────────────────── */}
-      <div className="invoice-print">
-        {/* Letterhead / logo section – always printed */}
-        {/* NOTE: replace the XS block with your actual logo:
-             <img src="/logo-invoice.png" alt="Harmony Luxe" className="h-10 w-auto" />
-             Put the file under /public/logo-invoice.png
-        */}
+      {/* ── Floating action pill (screen only) ──────────────────── */}
+<div className="no-print fixed inset-x-2 bottom-3 z-40 flex justify-center sm:inset-auto sm:bottom-6 sm:right-6 sm:justify-end">
+  <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full bg-slate-900/95 px-3 py-2 text-[11px] text-slate-100 shadow-lg ring-1 ring-black/40 sm:text-xs">
+    <InvoiceActions
+      idOrNo={idOrNo}
+      printedAt={printedAt}
+      status={status}
+      autoPrint={autoPrint && status === "FINAL"}
+    />
+
+    <a
+      href="/invoices"
+      className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-50 hover:bg-slate-700"
+    >
+      ← Back
+    </a>
+  </div>
+</div>
+
+
+      {/* ── Printable A4 invoice (white) ───────────────────────── */}
+      <div className="invoice-print rounded-2xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200 sm:px-8 sm:py-6">
+        {/* Letterhead / logo section – this is what prints */}
         <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-black text-lg font-semibold text-white sm:h-16 sm:w-16">
-              XS
+            {/* LOGO (replaces XS block) */}
+            <div className="flex items-center bg-black p-2 rounded-xl">
+              <img
+                src="/harmony_luxe.png" // put your logo file under /public/logo-invoice.png
+                alt={spaName}
+                className="h-18 w-auto sm:h-18"
+              />
             </div>
+
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
                 {spaName}
@@ -163,16 +175,6 @@ export default async function InvoicePage(props: PageProps) {
             <div>
               <span className="font-medium text-slate-900">Date:</span>{" "}
               {billDate.toLocaleDateString()}
-            </div>
-            {bill.cashierEmail && (
-              <div>
-                <span className="font-medium text-slate-900">Cashier:</span>{" "}
-                {bill.cashierEmail}
-              </div>
-            )}
-            <div>
-              <span className="font-medium text-slate-900">Status:</span>{" "}
-              {statusLabel}
             </div>
           </div>
         </div>
@@ -262,7 +264,9 @@ export default async function InvoicePage(props: PageProps) {
                       )}
                     </td>
                     <td className="py-1 pr-2">
-                      {l.variant || <span className="text-slate-400">—</span>}
+                      {l.variant || (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="py-1 pr-2 text-right">{qty}</td>
                     <td className="py-1 pr-2 text-right">{inr(rate)}</td>
@@ -276,7 +280,6 @@ export default async function InvoicePage(props: PageProps) {
 
         {/* Totals + notes */}
         <section className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          {/* Notes (only if present) */}
           <div className="flex-1 text-[11px] text-slate-600 sm:text-xs">
             {hasNotes && (
               <>
@@ -310,7 +313,9 @@ export default async function InvoicePage(props: PageProps) {
                 )}
 
                 <tr>
-                  <td className="py-1 pr-2 text-slate-600">Taxable value</td>
+                  <td className="py-1 pr-2 text-slate-600">
+                    Taxable value
+                  </td>
                   <td className="py-1 pl-2 text-right">
                     {inr(t.taxableBase || 0)}
                   </td>

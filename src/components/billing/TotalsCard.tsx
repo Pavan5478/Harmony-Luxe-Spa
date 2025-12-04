@@ -1,5 +1,4 @@
-﻿// src/components/billing/TotalsCard.tsx
-"use client";
+﻿"use client";
 
 import { inr } from "@/lib/format";
 
@@ -25,7 +24,7 @@ export default function TotalsCard({
 
   return (
     <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground sm:text-base">
           Totals
         </h2>
@@ -36,7 +35,7 @@ export default function TotalsCard({
             onChange={(e) => onInterState(e.target.checked)}
             className="h-4 w-4 rounded border-border text-primary"
           />
-          Inter-state (IGST)
+          <span>Inter-state (IGST)</span>
         </label>
       </div>
 

@@ -13,12 +13,21 @@ type Props = {
   finalizationRate: number;
   draftCount: number;
   voidCount: number;
+  projectedRevenue: number;
+  expenseRatio: number | null;
 };
 
 function formatChange(pct: number | null) {
-  if (pct === null) return "No data vs last month";
+  if (pct === null || !Number.isFinite(pct)) return "No data vs last month";
   const sign = pct > 0 ? "+" : "";
   return `${sign}${pct.toFixed(1)}% vs last month`;
+}
+
+function formatExpenseRatio(ratio: number | null) {
+  if (ratio == null || !Number.isFinite(ratio)) {
+    return "No expense data yet";
+  }
+  return `${ratio.toFixed(1)}% of revenue`;
 }
 
 export default function StatsRow(props: Props) {
@@ -34,13 +43,15 @@ export default function StatsRow(props: Props) {
     finalizationRate,
     draftCount,
     voidCount,
+    projectedRevenue,
+    expenseRatio,
   } = props;
 
   const finRateLabel = `${finalizationRate.toFixed(0)}% finalized`;
 
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {/* Revenue */}
+      {/* This month revenue */}
       <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -63,15 +74,15 @@ export default function StatsRow(props: Props) {
         </div>
       </div>
 
-      {/* Invoices summary */}
+      {/* Projection + expense ratio */}
       <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              Total invoices
+              Projected revenue
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
-              {totalInvoices}
+              {inr(projectedRevenue)}
             </p>
           </div>
           <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-50 text-sky-600">
@@ -82,7 +93,7 @@ export default function StatsRow(props: Props) {
               aria-hidden="true"
             >
               <path
-                d="M5 12h4l3-6 3 12 2-6h3"
+                d="M4 19l4.5-5 3 3.5L17 9l3 4"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
@@ -92,26 +103,9 @@ export default function StatsRow(props: Props) {
             </svg>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted">
-          <span className="rounded-full bg-background px-2 py-0.5">
-            Final:{" "}
-            <span className="font-medium text-foreground">
-              {finalCount}
-            </span>
-          </span>
-          <span className="rounded-full bg-background px-2 py-0.5">
-            Draft:{" "}
-            <span className="font-medium text-foreground">
-              {draftCount}
-            </span>
-          </span>
-          <span className="rounded-full bg-background px-2 py-0.5">
-            Void:{" "}
-            <span className="font-medium text-foreground">
-              {voidCount}
-            </span>
-          </span>
-        </div>
+        <p className="mt-2 text-[11px] text-muted">
+          {formatExpenseRatio(expenseRatio)}
+        </p>
       </div>
 
       {/* Today snapshot */}
@@ -152,12 +146,12 @@ export default function StatsRow(props: Props) {
         </p>
       </div>
 
-      {/* Customers & finalization */}
+      {/* Customers & finalisation */}
       <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              Active customers
+              Customers & status
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
               {activeCustomers}
@@ -185,6 +179,32 @@ export default function StatsRow(props: Props) {
               style={{ width: `${Math.min(finalizationRate, 100)}%` }}
             />
           </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted">
+          <span className="rounded-full bg-background px-2 py-0.5">
+            Final:{" "}
+            <span className="font-medium text-foreground">
+              {finalCount}
+            </span>
+          </span>
+          <span className="rounded-full bg-background px-2 py-0.5">
+            Draft:{" "}
+            <span className="font-medium text-foreground">
+              {draftCount}
+            </span>
+          </span>
+          <span className="rounded-full bg-background px-2 py-0.5">
+            Void:{" "}
+            <span className="font-medium text-foreground">
+              {voidCount}
+            </span>
+          </span>
+          <span className="rounded-full bg-background px-2 py-0.5">
+            Total invoices:{" "}
+            <span className="font-medium text-foreground">
+              {totalInvoices}
+            </span>
+          </span>
         </div>
       </div>
     </section>

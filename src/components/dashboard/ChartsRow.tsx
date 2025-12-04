@@ -6,7 +6,7 @@ type Last7 = { label: string; weekday: string; total: number };
 type PaymentMixItem = {
   key: string;
   label: string;
-  color: string;
+  color: string; // Tailwind bg- class
 };
 
 type PaymentSegment = {
@@ -36,10 +36,16 @@ export default function ChartsRow({
   pmTotals,
   pmTotalAmount,
 }: Props) {
+  // digital share (card + upi + split)
+  const digitalTotal =
+    (pmTotals.CARD ?? 0) + (pmTotals.UPI ?? 0) + (pmTotals.SPLIT ?? 0);
+  const digitalShare =
+    pmTotalAmount > 0 ? (digitalTotal / pmTotalAmount) * 100 : 0;
+
   return (
-    <section className="grid gap-4 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.2fr)]">
+    <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)]">
       {/* Revenue trend card */}
-      <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-foreground sm:text-base">
@@ -59,41 +65,45 @@ export default function ChartsRow({
         </div>
 
         {/* Bars */}
-        <div className="mt-4 flex h-32 items-end gap-2">
+        <div className="mt-3 flex h-24 items-end gap-2 sm:h-28">
           {last7.map((d) => {
-            const baseHeight =
-              maxDayTotal > 0 ? (d.total / maxDayTotal) * 60 : 0;
-            const heightPct = 20 + baseHeight; // 20–80%
+            const ratio = maxDayTotal > 0 ? d.total / maxDayTotal : 0;
+            const barHeight = Math.max(ratio * 100, d.total > 0 ? 18 : 0);
 
             return (
               <div
                 key={d.label}
                 className="flex flex-1 flex-col items-center gap-1"
               >
-                <div className="flex h-full w-full items-end">
-                  <div className="relative w-full overflow-hidden rounded-full bg-slate-100">
+                <div className="flex h-full w-full items-end justify-center">
+                  <div className="flex h-full w-5 items-end justify-center rounded-full bg-muted/15 sm:w-6">
                     <div
-                      className="w-full rounded-full bg-primary/25"
-                      style={{ height: `${heightPct}%` }}
-                    >
-                      <div className="h-full w-full rounded-full bg-primary/80" />
-                    </div>
+                      className="w-full rounded-full bg-primary"
+                      style={{ height: `${barHeight}%` }}
+                    />
                   </div>
                 </div>
-                <div className="mt-1 text-[10px] leading-tight text-muted">
-                  <div>{d.weekday}</div>
+                <div className="mt-1 text-center text-[10px] leading-tight text-muted">
                   <div className="font-medium text-foreground">
+                    {d.weekday.slice(0, 3)}
+                  </div>
+                  <div>
                     {d.total > 0 ? `₹${d.total.toFixed(0)}` : "—"}
                   </div>
                 </div>
               </div>
             );
           })}
+          {last7.length === 0 && (
+            <div className="flex h-full w-full items-center justify-center text-[11px] text-muted">
+              No revenue data for the last 7 days.
+            </div>
+          )}
         </div>
       </div>
 
       {/* Payment mix card */}
-      <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-foreground sm:text-base">
@@ -111,8 +121,8 @@ export default function ChartsRow({
           </div>
         </div>
 
-        {paymentMix.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-border bg-background px-3 py-3 text-[11px] text-muted">
+        {paymentMix.length === 0 || pmTotalAmount <= 0 ? (
+          <div className="mt-4 rounded-xl border border-dashed border-border bg-background/40 px-3 py-3 text-[11px] text-muted">
             No finalized invoices for this month yet. Once you start
             billing, payment mix will appear here.
           </div>
@@ -120,7 +130,7 @@ export default function ChartsRow({
           <>
             {/* Stacked bar */}
             <div className="mt-4">
-              <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted/20">
                 {paymentSegments.map((seg) => (
                   <div
                     key={seg.key}
@@ -131,6 +141,20 @@ export default function ChartsRow({
                     }}
                   />
                 ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[10px] text-muted">
+                <span>
+                  Modes:{" "}
+                  <span className="font-medium text-foreground">
+                    {paymentMix.map((p) => p.label).join(" • ")}
+                  </span>
+                </span>
+                <span>
+                  Digital share:{" "}
+                  <span className="font-medium text-foreground">
+                    {digitalShare.toFixed(0)}%
+                  </span>
+                </span>
               </div>
             </div>
 
@@ -143,7 +167,7 @@ export default function ChartsRow({
                 return (
                   <div
                     key={pm.key}
-                    className="flex items-center justify-between rounded-xl bg-background px-2.5 py-1.5"
+                    className="flex items-center justify-between rounded-xl bg-background/60 px-2.5 py-1.5"
                   >
                     <div className="flex items-center gap-2">
                       <span

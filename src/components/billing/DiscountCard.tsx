@@ -1,5 +1,4 @@
-﻿// src/components/billing/DiscountCard.tsx
-"use client";
+﻿"use client";
 
 export default function DiscountCard({
   value,
@@ -11,8 +10,8 @@ export default function DiscountCard({
   onPct: (n: number) => void;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <h2 className="mb-3 text-sm font-semibold text-foreground sm:text-base">
+    <div className="space-y-2">
+      <h2 className="text-sm font-semibold text-foreground sm:text-base">
         Discount (optional)
       </h2>
       <div className="grid gap-3 md:grid-cols-2">
@@ -24,9 +23,7 @@ export default function DiscountCard({
             type="number"
             min={0}
             value={value.flat || ""}
-            onChange={(e) =>
-              onFlat(Number(e.target.value || 0))
-            }
+            onChange={(e) => onFlat(Number(e.target.value || 0))}
             placeholder="e.g. 500"
             className="mt-1 w-full rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
@@ -41,18 +38,16 @@ export default function DiscountCard({
             max={100}
             step="0.1"
             value={value.pct || ""}
-            onChange={(e) =>
-              onPct(Number(e.target.value || 0))
-            }
+            onChange={(e) => onPct(Number(e.target.value || 0))}
             placeholder="e.g. 10"
             className="mt-1 w-full rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-muted">
-        You can use either or both; the system automatically caps the
-        discount to the subtotal.
+      <p className="text-[11px] text-muted">
+        You can use flat + percent together; the system never lets discount go
+        above the subtotal.
       </p>
-    </section>
+    </div>
   );
 }

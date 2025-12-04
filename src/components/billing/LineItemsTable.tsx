@@ -1,5 +1,4 @@
-﻿// src/components/billing/LineItemsTable.tsx
-"use client";
+﻿"use client";
 
 import type { BillLine } from "@/types/billing";
 import { inr } from "@/lib/format";
@@ -16,14 +15,14 @@ export default function LineItemsTable({
   if (!lines.length) {
     return (
       <p className="mt-3 text-xs text-muted sm:text-sm">
-        No items yet. Use the selector above to add services to this
-        bill.
+        No items yet. Use the selector above or the recent buttons to add
+        services.
       </p>
     );
   }
 
   return (
-    <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-background">
+    <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-background">
       <table className="min-w-full text-left text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-border/70 bg-background/80 text-[11px] uppercase tracking-wide text-muted">

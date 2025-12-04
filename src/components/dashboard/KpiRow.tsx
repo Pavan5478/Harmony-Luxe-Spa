@@ -36,7 +36,7 @@ export default function KpiRow({
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {/* Revenue */}
-      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -46,7 +46,7 @@ export default function KpiRow({
               {inr(monthRevenue)}
             </p>
           </div>
-          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+          <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
             {monthInvoiceCount} invoices
           </span>
         </div>
@@ -56,7 +56,7 @@ export default function KpiRow({
       </div>
 
       {/* Average bill */}
-      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           Average bill value
         </p>
@@ -69,7 +69,7 @@ export default function KpiRow({
       </div>
 
       {/* Today */}
-      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           Today
         </p>
@@ -79,17 +79,17 @@ export default function KpiRow({
         <p className="mt-2 text-[11px] text-muted">
           {todayLabel} •{" "}
           {weekTotal > 0
-            ? `Part of ₹${weekTotal.toFixed(2)} in the last 7 days`
+            ? `Part of ${inr(weekTotal)} in the last 7 days`
             : "No finalized invoices yet this week."}
         </p>
       </div>
 
       {/* Draft / void snapshot */}
-      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Draft &amp; void
+          Draft & void
         </p>
-        <div className="mt-2 flex items-center gap-3 text-sm">
+        <div className="mt-2 flex items-center gap-4 text-sm">
           <div className="flex flex-col">
             <span className="text-xs text-muted">Drafts</span>
             <span className="text-lg font-semibold text-foreground">

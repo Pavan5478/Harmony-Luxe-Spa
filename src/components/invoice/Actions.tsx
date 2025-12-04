@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 type Status = "DRAFT" | "FINAL" | "VOID";
 
 type Props = {
-  idOrNo: string;          // billNo for FINAL, draft id for DRAFT
+  idOrNo: string; // billNo for FINAL, draft id for DRAFT
   printedAt: string | null;
   status: Status;
   /** if true and status is FINAL, auto-open print dialog once */
@@ -114,13 +114,13 @@ export default function InvoiceActions({
   const hasPrintedOnce = !!printedAt;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-      {/* Left group: primary actions */}
-      <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col items-center gap-1 text-[11px] sm:items-start sm:text-xs">
+      {/* First line: buttons – centered on mobile, left on desktop */}
+      <div className="flex flex-wrap items-center justify-center gap-1 sm:justify-start">
         {isDraft && (
           <a
             href={`/billing?edit=${encodeURIComponent(idOrNo)}`}
-            className="inline-flex items-center rounded-full border border-primary/40 bg-primary/5 px-4 py-2 text-xs font-medium text-primary hover:bg-primary/10"
+            className="inline-flex items-center rounded-full border border-amber-400/60 bg-amber-400/10 px-3 py-1.5 text-[11px] font-medium text-amber-100 hover:bg-amber-400/20"
           >
             Edit draft
           </a>
@@ -131,7 +131,7 @@ export default function InvoiceActions({
             type="button"
             onClick={handlePrintAndFinalize}
             disabled={printing || finalizing}
-            className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
+            className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
           >
             {finalizing ? "Finalizing…" : "Print & finalize"}
           </button>
@@ -142,15 +142,15 @@ export default function InvoiceActions({
                 type="button"
                 onClick={handlePrint}
                 disabled={printing}
-                className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
+                className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
               >
-                {printing ? "Preparing print…" : "Print"}
+                {printing ? "Preparing…" : "Print"}
               </button>
               <button
                 type="button"
                 onClick={handlePrint}
                 disabled={printing}
-                className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground hover:bg-card disabled:opacity-60"
+                className="inline-flex items-center rounded-full border border-slate-500/60 bg-slate-800/40 px-3 py-1.5 text-[11px] font-medium text-slate-50 hover:bg-slate-700 disabled:opacity-60"
               >
                 Save as PDF
               </button>
@@ -159,40 +159,19 @@ export default function InvoiceActions({
         )}
       </div>
 
-      {/* Right group: navigation */}
-      <div className="ml-auto flex flex-wrap gap-2">
-        <a
-          href="/billing"
-          className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-card"
-        >
-          New bill
-        </a>
-        <a
-          href="/invoices"
-          className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-card"
-        >
-          Back to invoices
-        </a>
-        <a
-          href="/dashboard"
-          className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-card"
-        >
-          Dashboard
-        </a>
-      </div>
-
+      {/* Second line: helper text – centered on mobile, left on desktop */}
       {!isDraft && (
-        <p className="mt-2 w-full text-[11px] text-muted">
+        <p className="max-w-xs text-center text-[10px] text-slate-300 sm:text-left">
           {hasPrintedOnce
-            ? `First printed at ${new Date(printedAt!).toLocaleString()}`
+            ? `First printed at ${new Date(printedAt!).toLocaleString()}.`
             : "This invoice will be marked as printed the first time you use Print or Save as PDF."}
         </p>
       )}
       {isDraft && (
-        <p className="mt-2 w-full text-[11px] text-muted">
-          This is a draft. Edit the bill or use{" "}
-          <span className="font-semibold">Print &amp; finalize</span> to
-          assign a bill number and lock the invoice.
+        <p className="max-w-xs text-center text-[10px] text-slate-300 sm:text-left">
+          This is a draft. Use{" "}
+          <span className="font-semibold">Print &amp; finalize</span> to assign
+          a bill number and lock the invoice.
         </p>
       )}
     </div>

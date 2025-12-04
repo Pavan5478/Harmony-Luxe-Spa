@@ -387,14 +387,13 @@ aside {
   backdrop-filter: blur(14px);
 }
 
-/* ───────────────────────────────────────────────────────────
-   PRINT / INVOICE
-   ─────────────────────────────────────────────────────────── */
-
-/* ---------- INVOICE LAYOUT (screen) ---------- */
+/* ─────────────────────────────────────────
+   INVOICE LAYOUT (SCREEN)
+   ───────────────────────────────────────── */
 
 .invoice-shell {
-  background: #f3f4f6; /* light grey behind the “paper” on screen */
+  /* light grey behind the “paper” on screen */
+  background: #f3f4f6;
 }
 
 .invoice-print {
@@ -413,8 +412,9 @@ aside {
   }
 }
 
-/* ---------- PRINT RULES ---------- */
-/* ---------- PRINT RULES ---------- */
+/* ─────────────────────────────────────────
+   PRINT RULES
+   ───────────────────────────────────────── */
 
 @media print {
   @page {
@@ -423,13 +423,26 @@ aside {
   }
 
   html,
-  body {
+  body,
+  .app-shell,
+  .app-main {
     background: #ffffff !important;
+    color: #000000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* hide app chrome – sidebar, top navbar, buttons, etc. */
+  /* force all dark dashboard backgrounds to white on print */
+  .bg-background,
+  .bg-card,
+  .bg-muted,
+  .bg-slate-900,
+  .bg-slate-950,
+  .bg-black {
+    background-color: #ffffff !important;
+  }
+
+  /* hide app chrome – sidebar, top navbar, floating buttons, etc. */
   .app-shell > aside,
   .app-shell > header,
   .no-print {
