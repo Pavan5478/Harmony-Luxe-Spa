@@ -104,6 +104,17 @@ export default function Sidebar() {
         />
       </svg>
     ),
+    expenses: (
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+        <path
+          d="M12 2v20M17 6.5c0-2-1.9-3.5-5-3.5S7 4 7 6.5 9 10 12 10s5 1.5 5 3.5S15.1 17 12 17s-5-1.5-5-3.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
   };
 
   const links: LinkItem[] = useMemo(() => {
@@ -113,7 +124,7 @@ export default function Sidebar() {
         { href: "/menu", label: "Menu", icon: icon.menu },
         { href: "/billing", label: "Billing", icon: icon.billing },
         { href: "/invoices", label: "Invoices", icon: icon.invoices },
-        { href: "/expenses", label: "Expenses", icon: icon.reports }, // or make a new icon.money
+        { href: "/expenses", label: "Expenses", icon: icon.expenses },
         { href: "/reports", label: "Reports", icon: icon.reports },
         { href: "/settings", label: "Settings", icon: icon.settings },
       ];
@@ -122,7 +133,7 @@ export default function Sidebar() {
       return [
         { href: "/dashboard", label: "Dashboard", icon: icon.dashboard },
         { href: "/invoices", label: "Invoices", icon: icon.invoices },
-        { href: "/expenses", label: "Expenses", icon: icon.reports },
+        { href: "/expenses", label: "Expenses", icon: icon.expenses },
         { href: "/reports", label: "Reports", icon: icon.reports },
         { href: "/settings", label: "Settings", icon: icon.settings },
       ];
@@ -137,71 +148,86 @@ export default function Sidebar() {
   }, [role]);
 
   return (
-    <aside
-      className="
-        no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col
-        border-r border-border bg-card/95 shadow-sm backdrop-blur
-        lg:flex
-      "
-    >
+    <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card/95 shadow-sm backdrop-blur lg:flex">
       {/* Brand */}
-      <div className="flex h-16 items-center gap-2 border-b border-border px-4">
+      <div className="flex h-16 items-center gap-3 border-b border-border px-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background shadow ring-1 ring-primary/20">
           <span className="text-xs font-semibold text-primary">XS</span>
         </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold text-foreground">
+
+        <div className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-sm font-semibold text-foreground">
             Harmony Luxe
           </span>
-          <span className="text-[11px] text-muted">
+          <span className="truncate text-[11px] text-muted">
             Billing &amp; reports
           </span>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-2 py-3">
-        {links.map((link) => {
-          const active =
-            pathname === link.href ||
-            (pathname || "").startsWith(link.href + "/");
+      <nav className="flex-1 px-2 py-3">
+        <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+          Workspace
+        </div>
 
-          return (
-            <a
-              key={link.href}
-              href={link.href}
-              className={[
-                "flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
-                active
-                  ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
-                  : "text-muted hover:bg-background hover:text-foreground",
-              ].join(" ")}
-            >
-              <span
+        <div className="space-y-1">
+          {links.map((link) => {
+            const active =
+              pathname === link.href ||
+              (pathname || "").startsWith(link.href + "/");
+
+            return (
+              <a
+                key={link.href}
+                href={link.href}
+                aria-current={active ? "page" : undefined}
                 className={[
-                  "flex h-7 w-7 items-center justify-center rounded-lg text-[13px]",
-                  active ? "bg-primary/10 text-primary" : "bg-background",
+                  "group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition",
+                  active
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                    : "text-muted hover:bg-background hover:text-foreground",
                 ].join(" ")}
               >
-                {link.icon}
-              </span>
-              <span className="truncate">{link.label}</span>
-            </a>
-          );
-        })}
+                <span
+                  className={[
+                    "flex h-8 w-8 items-center justify-center rounded-xl ring-1 transition",
+                    active
+                      ? "bg-primary/10 text-primary ring-primary/20"
+                      : "bg-background text-foreground/80 ring-border group-hover:text-foreground",
+                  ].join(" ")}
+                >
+                  {link.icon}
+                </span>
+
+                <span className="truncate">{link.label}</span>
+
+                {/* active dot */}
+                <span
+                  className={[
+                    "ml-auto h-1.5 w-1.5 rounded-full transition",
+                    active ? "bg-primary" : "bg-transparent group-hover:bg-border",
+                  ].join(" ")}
+                  aria-hidden
+                />
+              </a>
+            );
+          })}
+        </div>
       </nav>
 
       {/* User footer */}
       <div className="border-t border-border bg-card/95 p-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-semibold uppercase text-white shadow">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-extrabold uppercase text-primary-foreground shadow">
             {(email || "U").charAt(0).toUpperCase()}
           </div>
+
           <div className="min-w-0">
-            <div className="truncate text-sm text-foreground">
+            <div className="truncate text-sm font-semibold text-foreground">
               {email || "—"}
             </div>
-            <div className="text-[11px] text-muted">
+            <div className="text-[11px] font-semibold text-muted">
               {role || "—"}
             </div>
           </div>

@@ -36,7 +36,8 @@ export default function Topbar() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // default = DARK (black + gold). Toggle can switch to LIGHT.
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   const [todayLabel, setTodayLabel] = useState("");
   const [invoiceStats, setInvoiceStats] = useState<InvoiceStats | null>(null);
@@ -159,43 +160,31 @@ export default function Topbar() {
     );
   }, []);
 
-  // init theme from localStorage / system
+  // init theme from localStorage (default to dark)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const root = window.document.documentElement;
-      const stored = window.localStorage.getItem("bb.theme");
-      const sysDark = window.matchMedia?.(
-        "(prefers-color-scheme: dark)"
-      ).matches;
-
-      const initial =
-        stored === "dark" || (!stored && sysDark) ? "dark" : "light";
-
-      setTheme(initial);
-      if (initial === "dark") root.classList.add("theme-dark");
-      else root.classList.remove("theme-dark");
-    } catch {
-      // ignore
-    }
-  }, []);
+  if (typeof window === "undefined") return;
+  const root = document.documentElement;
+  setTheme(root.classList.contains("theme-dark") ? "dark" : "light");
+}, []);
 
   function toggleTheme() {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      if (typeof window !== "undefined") {
-        try {
-          const root = window.document.documentElement;
-          if (next === "dark") root.classList.add("theme-dark");
-          else root.classList.remove("theme-dark");
-          window.localStorage.setItem("bb.theme", next);
-        } catch {
-          // ignore
-        }
-      }
-      return next;
-    });
-  }
+  setTheme((prev) => {
+    const next = prev === "light" ? "dark" : "light";
+    if (typeof window !== "undefined") {
+      const root = window.document.documentElement;
+
+      if (next === "dark") root.classList.add("theme-dark");
+      else root.classList.remove("theme-dark");
+
+      // localStorage (optional)
+      window.localStorage.setItem("bb.theme", next);
+
+      // ✅ cookie (this is what fixes SSR hydration)
+      document.cookie = `bb.theme=${next}; path=/; max-age=31536000; samesite=lax`;
+    }
+    return next;
+  });
+}
 
   async function doLogout() {
     try {
@@ -292,7 +281,7 @@ export default function Topbar() {
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-slate-700 shadow-sm lg:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm lg:hidden"
             aria-label="Open navigation"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
@@ -560,7 +549,7 @@ export default function Topbar() {
           <button
             type="button"
             onClick={doLogout}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-[11px] text-red-600 shadow-sm hover:bg-red-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-[11px] text-danger shadow-sm hover:bg-danger/10"
             aria-label="Logout"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
@@ -604,7 +593,7 @@ export default function Topbar() {
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-background text-slate-600"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-background text-muted"
                 aria-label="Close menu"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
@@ -643,7 +632,7 @@ export default function Topbar() {
               <button
                 type="button"
                 onClick={doLogout}
-                className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-danger hover:bg-danger/10"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
                   <path
