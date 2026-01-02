@@ -1,4 +1,6 @@
 // src/components/dashboard/QuickActions.tsx
+import Link from "next/link";
+
 type Card = {
   title: string;
   href: string;
@@ -26,9 +28,10 @@ export default function QuickActions({ cards }: Props) {
               : "bg-amber-500/15 text-amber-300";
 
           return (
-            <a
+            <Link
               key={c.title}
               href={c.href}
+              prefetch
               className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md sm:p-5"
             >
               <div className="flex items-start justify-between gap-3">
@@ -85,7 +88,7 @@ export default function QuickActions({ cards }: Props) {
               </div>
 
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-br from-primary/20 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
-            </a>
+            </Link>
           );
         })}
       </div>

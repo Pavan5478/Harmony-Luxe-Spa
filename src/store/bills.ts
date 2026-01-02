@@ -1,84 +1,81 @@
 ﻿// src/store/bills.ts
 import type { BillDraft, BillFinal } from "@/types/billing";
 import { nextBillNo } from "@/lib/billno";
-import { loadBillsFromSheet, saveBillToSheet } from "@/lib/sheets";
+import {
+  loadBillsFromSheet,
+  loadBillFromSheetByKey,
+  saveBillToSheet,
+} from "@/lib/sheets";
 
 type AnyBill = BillDraft | BillFinal;
 
 // ─────────────────────────────
-// Tiny in-memory cache (per server instance)
+// Cache (list + single)
 // ─────────────────────────────
+const LIST_CACHE_MS = 20_000;
+let listCache: { data: AnyBill[]; ts: number } | null = null;
 
-const CACHE_MS = 10_000; // 10 seconds of reuse is enough for 1–user usage
-
-let billsCache:
-  | {
-      data: AnyBill[];
-      ts: number;
-    }
-  | null = null;
+const SINGLE_CACHE_MS = 20_000;
+const singleCache = new Map<string, { bill: AnyBill; ts: number }>();
 
 function invalidateCache() {
-  billsCache = null;
+  listCache = null;
+  singleCache.clear();
 }
 
 async function loadAll(): Promise<AnyBill[]> {
   const now = Date.now();
-  if (billsCache && now - billsCache.ts < CACHE_MS) {
-    return billsCache.data;
-  }
+  if (listCache && now - listCache.ts < LIST_CACHE_MS) return listCache.data;
 
   const rows = await loadBillsFromSheet();
   const data = rows as AnyBill[];
-  billsCache = { data, ts: now };
+  listCache = { data, ts: now };
   return data;
 }
 
-function findIndex(all: AnyBill[], idOrNo: string): number {
-  return all.findIndex(
-    (b: any) => b.id === idOrNo || b.billNo === idOrNo
-  );
-}
-
-// Generate draft ids like D1, D2, ...
-function nextDraftId(all: AnyBill[]): string {
-  let max = 0;
-  for (const b of all as any[]) {
-    const id = String(b.id || "");
-    if (id.startsWith("D")) {
-      const n = parseInt(id.slice(1), 10);
-      if (!Number.isNaN(n) && n > max) max = n;
-    }
-  }
-  return "D" + (max + 1);
+function newDraftId(): string {
+  // fast, no-sheet-scan id
+  const t = Date.now().toString(36).toUpperCase();
+  const r = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `D${t}${r}`;
 }
 
 // ─────────────────────────────
 // Public API
 // ─────────────────────────────
 
-export async function listBills(
-  status?: "DRAFT" | "FINAL" | "VOID"
-): Promise<AnyBill[]> {
+export async function listBills(status?: "DRAFT" | "FINAL" | "VOID"): Promise<AnyBill[]> {
   const all = await loadAll();
   if (!status) return all;
   return all.filter((b: any) => b.status === status);
 }
 
-export async function getBill(
-  idOrNo: string
-): Promise<AnyBill | undefined> {
-  const all = await loadAll();
-  const ix = findIndex(all, idOrNo);
-  return ix === -1 ? undefined : all[ix];
+export async function getBill(idOrNo: string): Promise<AnyBill | undefined> {
+  const k = String(idOrNo || "").trim();
+  if (!k) return undefined;
+
+  const now = Date.now();
+  const cached = singleCache.get(k);
+  if (cached && now - cached.ts < SINGLE_CACHE_MS) return cached.bill;
+
+  // FAST: 1-row fetch via InvoiceIndex
+  const b = (await loadBillFromSheetByKey(k)) as AnyBill | undefined;
+  if (!b) return undefined;
+
+  singleCache.set(k, { bill: b, ts: now });
+  const id = String((b as any).id || "").trim();
+  const billNo = String((b as any).billNo || "").trim();
+  if (id) singleCache.set(id, { bill: b, ts: now });
+  if (billNo) singleCache.set(billNo, { bill: b, ts: now });
+
+  return b;
 }
 
 // Create draft (status=DRAFT, stored directly in Sheets)
 export async function createDraft(
   d: Omit<BillDraft, "id" | "status" | "createdAt">
 ): Promise<BillDraft> {
-  const all = await loadAll();
-  const id = nextDraftId(all);
+  const id = newDraftId();
 
   const draft: BillDraft = {
     ...(d as any),
@@ -93,20 +90,14 @@ export async function createDraft(
 }
 
 // Finalize draft -> FINAL bill (adds BillNo, finalizedAt, cashierEmail)
-export async function finalizeDraft(
-  id: string,
-  cashierEmail: string
-): Promise<BillFinal> {
-  const all = await loadAll();
+export async function finalizeDraft(id: string, cashierEmail: string): Promise<BillFinal> {
+  const existing = await getBill(id);
+  const base = existing as any;
 
-  const ix = all.findIndex(
-    (b: any) => b.id === id && b.status === "DRAFT"
-  );
-  if (ix === -1) {
+  if (!base || base.status !== "DRAFT" || String(base.id || "").trim() !== String(id || "").trim()) {
     throw new Error("Draft not found");
   }
 
-  const base = all[ix] as any;
   const billNo = await nextBillNo();
 
   const fin: BillFinal = {
@@ -122,16 +113,15 @@ export async function finalizeDraft(
   return fin;
 }
 
-// Replace (update) a bill by id OR billNo (works for DRAFT & FINAL)
+// Replace (update) a bill by id OR billNo (works for DRAFT only from API)
 export async function updateBill(
   idOrNo: string,
   patch: Partial<BillFinal | BillDraft>
 ): Promise<AnyBill> {
-  const all = await loadAll();
-  const ix = findIndex(all, idOrNo);
-  if (ix === -1) throw new Error("Bill not found");
+  const existing = await getBill(idOrNo);
+  if (!existing) throw new Error("Bill not found");
 
-  const original = all[ix] as any;
+  const original = existing as any;
 
   // Fields we never let the client override
   const keep = {
@@ -144,21 +134,19 @@ export async function updateBill(
   };
 
   const updated = { ...original, ...patch, ...keep } as AnyBill;
+
   await saveBillToSheet(updated);
   invalidateCache();
   return updated;
 }
 
 // Mark as printed (by id or billNo)
-export async function markPrinted(
-  idOrNo: string
-): Promise<AnyBill> {
-  const all = await loadAll();
-  const ix = findIndex(all, idOrNo);
-  if (ix === -1) throw new Error("Bill not found");
+export async function markPrinted(idOrNo: string): Promise<AnyBill> {
+  const existing = await getBill(idOrNo);
+  if (!existing) throw new Error("Bill not found");
 
   const updated: any = {
-    ...(all[ix] as any),
+    ...(existing as any),
     printedAt: new Date().toISOString(),
   };
 
@@ -168,16 +156,12 @@ export async function markPrinted(
 }
 
 // Soft delete: mark VOID in sheet.
-// Moving row to Deleted sheet is handled in API route (moveInvoiceToDeleted).
-export async function voidBill(
-  idOrNo: string
-): Promise<AnyBill> {
-  const all = await loadAll();
-  const ix = findIndex(all, idOrNo);
-  if (ix === -1) throw new Error("Bill not found");
+export async function voidBill(idOrNo: string): Promise<AnyBill> {
+  const existing = await getBill(idOrNo);
+  if (!existing) throw new Error("Bill not found");
 
   const updated: any = {
-    ...(all[ix] as any),
+    ...(existing as any),
     status: "VOID",
   };
 
@@ -188,6 +172,5 @@ export async function voidBill(
 
 // DEV helper – kept so old imports don't break
 export function clearBills() {
-  // no-op in Sheets-backed version
   invalidateCache();
 }

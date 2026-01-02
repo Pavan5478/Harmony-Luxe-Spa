@@ -1,14 +1,14 @@
-﻿﻿// src/app/(app)/invoices/[...id]/page.tsx
+// src/app/(app)/invoices/[...id]/page.tsx
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { listBills } from "@/store/bills";
+import { getBill } from "@/store/bills";
 import { inr } from "@/lib/format";
 import InvoiceActions from "@/components/invoice/Actions";
 
 type PageProps = {
-  // Next 16 passes these as Promises
   params: Promise<{ id: string[] | string }>;
-  searchParams?: Promise<{ print?: string }>;
+  searchParams?: Promise<{ print?: string; from?: string; edit?: string }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -21,24 +21,12 @@ export default async function InvoicePage(props: PageProps) {
   const sp = (await props.searchParams) || {};
   const autoPrint = sp.print === "1" || sp.print === "true";
 
-  // ── Robust key handling (works with encoded / and multi-segment URLs) ──
   const idParam = params.id;
   const segments = Array.isArray(idParam) ? idParam : [idParam];
   const key = decodeURIComponent(segments.join("/")).trim();
 
-  const bills = await listBills();
-
-  const found =
-    bills.find((b: any) => String(b.billNo || "").trim() === key) ||
-    bills.find((b: any) => String(b.id || "").trim() === key);
-
-  if (!found) {
-    console.error("Invoice not found in detail page", {
-      key,
-      billsCount: bills.length,
-    });
-    notFound();
-  }
+  const found = await getBill(key);
+  if (!found) notFound();
 
   const bill: any = found;
 
@@ -57,7 +45,12 @@ export default async function InvoicePage(props: PageProps) {
   const printedAt: string | null = bill.printedAt || null;
   const idOrNo: string = (bill.billNo as string) || (bill.id as string) || key;
 
-  // TODO: later load this from Settings sheet
+  // Back link behavior
+  const backHref =
+    sp.from === "billing" && sp.edit
+      ? `/billing?edit=${encodeURIComponent(sp.edit)}`
+      : "/invoices";
+
   const spaName = "Harmony Luxe";
   const spaAddress = [
     "123, Sample Street",
@@ -67,7 +60,6 @@ export default async function InvoicePage(props: PageProps) {
   const spaPhone = "+91 98765 43210";
   const spaEmail = "info@spa.com";
 
-  // status chip (screen only, not printed)
   const baseBadge =
     "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium";
   let statusClass = "";
@@ -85,7 +77,6 @@ export default async function InvoicePage(props: PageProps) {
 
   return (
     <div className="invoice-shell mx-auto max-w-5xl px-4 pb-20 pt-4 sm:px-6 lg:px-8">
-      {/* ── Screen header (not printed) ─────────────────────────── */}
       <header className="no-print mb-4">
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
           <div>
@@ -115,35 +106,31 @@ export default async function InvoicePage(props: PageProps) {
         </div>
       </header>
 
-      {/* ── Floating action pill (screen only) ──────────────────── */}
-<div className="no-print fixed inset-x-2 bottom-3 z-40 flex justify-center sm:inset-auto sm:bottom-6 sm:right-6 sm:justify-end">
-  <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full bg-slate-900/95 px-3 py-2 text-[11px] text-slate-100 shadow-lg ring-1 ring-black/40 sm:text-xs">
-    <InvoiceActions
-      idOrNo={idOrNo}
-      printedAt={printedAt}
-      status={status}
-      autoPrint={autoPrint && status === "FINAL"}
-    />
+      <div className="no-print fixed inset-x-2 bottom-3 z-40 flex justify-center sm:inset-auto sm:bottom-6 sm:right-6 sm:justify-end">
+        <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full bg-slate-900/95 px-3 py-2 text-[11px] text-slate-100 shadow-lg ring-1 ring-black/40 sm:text-xs">
+          <InvoiceActions
+            idOrNo={idOrNo}
+            printedAt={printedAt}
+            status={status}
+            autoPrint={autoPrint && status === "FINAL"}
+          />
 
-    <a
-      href="/invoices"
-      className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-50 hover:bg-slate-700"
-    >
-      ← Back
-    </a>
-  </div>
-</div>
+          <Link
+            href={backHref}
+            className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-50 hover:bg-slate-700 hover:no-underline"
+          >
+            ← Back
+          </Link>
+        </div>
+      </div>
 
-
-      {/* ── Printable A4 invoice (white) ───────────────────────── */}
+      {/* Printable invoice */}
       <div className="invoice-print rounded-2xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200 sm:px-8 sm:py-6">
-        {/* Letterhead / logo section – this is what prints */}
         <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            {/* LOGO (replaces XS block) */}
-            <div className="flex items-center bg-black p-2 rounded-xl">
+            <div className="flex items-center rounded-xl bg-black p-2">
               <img
-                src="/harmony_luxe.png" // put your logo file under /public/logo-invoice.png
+                src="/harmony_luxe.png"
                 alt={spaName}
                 className="h-18 w-auto sm:h-18"
               />
@@ -165,9 +152,7 @@ export default async function InvoicePage(props: PageProps) {
           </div>
 
           <div className="text-right text-[11px] text-slate-600 sm:text-xs">
-            <div className="text-xs font-semibold text-slate-900">
-              Tax invoice
-            </div>
+            <div className="text-xs font-semibold text-slate-900">Tax invoice</div>
             <div className="mt-1">
               <span className="font-medium text-slate-900">Bill #</span>{" "}
               {bill.billNo || bill.id}
@@ -179,7 +164,6 @@ export default async function InvoicePage(props: PageProps) {
           </div>
         </div>
 
-        {/* Billed to + payment details */}
         <section className="mt-4 grid gap-4 border-b border-slate-200 pb-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)]">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -200,36 +184,24 @@ export default async function InvoicePage(props: PageProps) {
             </p>
             <div className="mt-1">
               Payment mode:{" "}
-              <span className="font-medium text-slate-900">
-                {bill.paymentMode || "—"}
-              </span>
+              <span className="font-medium text-slate-900">{bill.paymentMode || "—"}</span>
             </div>
             {bill.split && bill.paymentMode === "SPLIT" && (
               <div className="mt-1 space-y-0.5">
                 <div>
-                  Cash:{" "}
-                  <span className="font-medium text-slate-900">
-                    {inr(bill.split.cash || 0)}
-                  </span>
+                  Cash: <span className="font-medium text-slate-900">{inr(bill.split.cash || 0)}</span>
                 </div>
                 <div>
-                  Card:{" "}
-                  <span className="font-medium text-slate-900">
-                    {inr(bill.split.card || 0)}
-                  </span>
+                  Card: <span className="font-medium text-slate-900">{inr(bill.split.card || 0)}</span>
                 </div>
                 <div>
-                  UPI:{" "}
-                  <span className="font-medium text-slate-900">
-                    {inr(bill.split.upi || 0)}
-                  </span>
+                  UPI: <span className="font-medium text-slate-900">{inr(bill.split.upi || 0)}</span>
                 </div>
               </div>
             )}
           </div>
         </section>
 
-        {/* Line items */}
         <section className="mt-4">
           <table className="w-full border-collapse text-xs sm:text-sm">
             <thead className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
@@ -248,26 +220,13 @@ export default async function InvoicePage(props: PageProps) {
                 const rate = Number(l.rate || 0);
                 const amount = qty * rate;
                 return (
-                  <tr
-                    key={idx}
-                    className="border-b border-slate-100 align-top"
-                  >
+                  <tr key={idx} className="border-b border-slate-100 align-top">
                     <td className="py-1 pr-2">{idx + 1}</td>
                     <td className="py-1 pr-2">
-                      <div className="font-medium text-slate-900">
-                        {l.name || "-"}
-                      </div>
-                      {l.itemId && (
-                        <div className="text-[10px] text-slate-500">
-                          Code: {l.itemId}
-                        </div>
-                      )}
+                      <div className="font-medium text-slate-900">{l.name || "-"}</div>
+                      {l.itemId && <div className="text-[10px] text-slate-500">Code: {l.itemId}</div>}
                     </td>
-                    <td className="py-1 pr-2">
-                      {l.variant || (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
+                    <td className="py-1 pr-2">{l.variant || <span className="text-slate-400">—</span>}</td>
                     <td className="py-1 pr-2 text-right">{qty}</td>
                     <td className="py-1 pr-2 text-right">{inr(rate)}</td>
                     <td className="py-1 pl-2 text-right">{inr(amount)}</td>
@@ -278,7 +237,6 @@ export default async function InvoicePage(props: PageProps) {
           </table>
         </section>
 
-        {/* Totals + notes */}
         <section className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex-1 text-[11px] text-slate-600 sm:text-xs">
             {hasNotes && (
@@ -286,9 +244,7 @@ export default async function InvoicePage(props: PageProps) {
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Notes
                 </p>
-                <p className="mt-1 whitespace-pre-line text-slate-900">
-                  {notes}
-                </p>
+                <p className="mt-1 whitespace-pre-line text-slate-900">{notes}</p>
               </>
             )}
           </div>
@@ -298,59 +254,43 @@ export default async function InvoicePage(props: PageProps) {
               <tbody>
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">Subtotal</td>
-                  <td className="py-1 pl-2 text-right">
-                    {inr(t.subtotal || 0)}
-                  </td>
+                  <td className="py-1 pl-2 text-right">{inr(t.subtotal || 0)}</td>
                 </tr>
 
                 {hasDiscount && (
                   <tr>
                     <td className="py-1 pr-2 text-slate-600">Discount</td>
-                    <td className="py-1 pl-2 text-right">
-                      −{inr(discount)}
-                    </td>
+                    <td className="py-1 pl-2 text-right">−{inr(discount)}</td>
                   </tr>
                 )}
 
                 <tr>
-                  <td className="py-1 pr-2 text-slate-600">
-                    Taxable value
-                  </td>
-                  <td className="py-1 pl-2 text-right">
-                    {inr(t.taxableBase || 0)}
-                  </td>
+                  <td className="py-1 pr-2 text-slate-600">Taxable value</td>
+                  <td className="py-1 pl-2 text-right">{inr(t.taxableBase || 0)}</td>
                 </tr>
 
                 {(t.cgst || 0) > 0 && (
                   <tr>
                     <td className="py-1 pr-2 text-slate-600">CGST</td>
-                    <td className="py-1 pl-2 text-right">
-                      {inr(t.cgst || 0)}
-                    </td>
+                    <td className="py-1 pl-2 text-right">{inr(t.cgst || 0)}</td>
                   </tr>
                 )}
                 {(t.sgst || 0) > 0 && (
                   <tr>
                     <td className="py-1 pr-2 text-slate-600">SGST</td>
-                    <td className="py-1 pl-2 text-right">
-                      {inr(t.sgst || 0)}
-                    </td>
+                    <td className="py-1 pl-2 text-right">{inr(t.sgst || 0)}</td>
                   </tr>
                 )}
                 {(t.igst || 0) > 0 && (
                   <tr>
                     <td className="py-1 pr-2 text-slate-600">IGST</td>
-                    <td className="py-1 pl-2 text-right">
-                      {inr(t.igst || 0)}
-                    </td>
+                    <td className="py-1 pl-2 text-right">{inr(t.igst || 0)}</td>
                   </tr>
                 )}
                 {(t.roundOff || 0) !== 0 && (
                   <tr>
                     <td className="py-1 pr-2 text-slate-600">Round off</td>
-                    <td className="py-1 pl-2 text-right">
-                      {inr(t.roundOff || 0)}
-                    </td>
+                    <td className="py-1 pl-2 text-right">{inr(t.roundOff || 0)}</td>
                   </tr>
                 )}
                 <tr>
@@ -366,14 +306,9 @@ export default async function InvoicePage(props: PageProps) {
           </div>
         </section>
 
-        {/* Footer note */}
         <footer className="mt-6 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-500 print:text-[9px]">
-          <div>
-            Thank you for choosing {spaName}. Relax, refresh, rejuvenate.
-          </div>
-          <div className="mt-1">
-            This is a computer-generated invoice. No signature required.
-          </div>
+          <div>Thank you for choosing {spaName}. Relax, refresh, rejuvenate.</div>
+          <div className="mt-1">This is a computer-generated invoice. No signature required.</div>
         </footer>
       </div>
     </div>

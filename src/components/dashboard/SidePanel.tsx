@@ -1,4 +1,5 @@
 // src/components/dashboard/SidePanel.tsx
+import Link from "next/link";
 type Card = {
   title: string;
   href: string;
@@ -34,15 +35,16 @@ export default function SidePanel({ roleLabel, cards }: Props) {
         <ul className="mt-2 space-y-1.5">
           {cards.map((c) => (
             <li key={c.href}>
-              <a
+              <Link
                 href={c.href}
-                className="flex items-center justify-between rounded-xl px-2 py-1.5 text-xs hover:bg-background/70"
+                prefetch
+                className="flex items-center justify-between rounded-xl px-2 py-1.5 text-xs hover:bg-background/70 hover:no-underline"
               >
                 <span className="truncate font-medium text-foreground">
                   {c.title}
                 </span>
                 <span className="text-[11px] text-muted">Open</span>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

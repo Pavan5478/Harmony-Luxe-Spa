@@ -27,6 +27,5 @@ export async function POST(req: NextRequest) {
   const data = await req.json();
   const draft = await createDraft(data);
 
-  // { id, bill } shape is what BillingActions expects
   return NextResponse.json({ id: draft.id, bill: draft });
 }

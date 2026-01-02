@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { inr } from "@/lib/format";
 
 type Status = "FINAL" | "DRAFT" | "VOID";
@@ -73,12 +74,13 @@ export default function RecentInvoices() {
             </span>
           </span>
 
-          <a
+          <Link
             href="/invoices"
+            prefetch
             className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary ring-1 ring-primary/25 hover:bg-primary/15 hover:no-underline"
           >
             View all
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -135,10 +137,8 @@ export default function RecentInvoices() {
                   })
                 : "";
 
-              const Wrapper: any = hasLink ? "a" : "div";
-              const wrapperProps = hasLink
-                ? { href: `/invoices/${linkId}` }
-                : {};
+              const rowClassName =
+                "group flex items-center justify-between px-3.5 py-3 text-xs transition hover:bg-card/90 hover:no-underline";
 
               const statusClasses =
                 status === "FINAL"
@@ -156,12 +156,8 @@ export default function RecentInvoices() {
 
               const serial = idx + 1;
 
-              return (
-                <Wrapper
-                  key={key}
-                  {...wrapperProps}
-                  className="group flex items-center justify-between px-3.5 py-3 text-xs transition hover:bg-card/90 hover:no-underline"
-                >
+              const content = (
+                <>
                   <div className="flex items-start gap-3">
                     {/* Serial number pill – subtle, no box around row */}
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
@@ -210,7 +206,22 @@ export default function RecentInvoices() {
                       </div>
                     )}
                   </div>
-                </Wrapper>
+                </>
+              );
+
+              return hasLink ? (
+                <Link
+                  key={key}
+                  href={`/invoices/${linkId}`}
+                  prefetch
+                  className={rowClassName}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={key} className={rowClassName}>
+                  {content}
+                </div>
               );
             })}
           </div>

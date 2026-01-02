@@ -1,10 +1,9 @@
 ﻿// src/app/(app)/invoices/page.tsx
 import Link from "next/link";
 import { inr } from "@/lib/format";
-import { listBills } from "@/store/bills";
 import { getSession } from "@/lib/session";
 import DeleteButton from "@/components/invoice/DeleteButton";
-import type { BillDraft, BillFinal } from "@/types/billing";
+import { readRows } from "@/lib/sheets";
 
 type SP = {
   q?: string;
@@ -13,7 +12,6 @@ type SP = {
   status?: "FINAL" | "DRAFT" | "VOID" | "ALL";
 };
 
-type AnyBill = BillDraft | BillFinal;
 type RowStatus = "FINAL" | "DRAFT" | "VOID";
 
 type Row = {
@@ -34,27 +32,21 @@ function parseISO(d?: string) {
   return Number.isFinite(t) ? t : NaN;
 }
 
-// Status pill tuned for dark dashboard
 function statusBadge(s: RowStatus) {
   const base =
     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium";
 
   if (s === "FINAL") {
     return (
-      <span
-        className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}
-      >
+      <span className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}>
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         Final
       </span>
     );
   }
-
   if (s === "VOID") {
     return (
-      <span
-        className={`${base} border border-danger/40 bg-danger/10 text-danger`}
-      >
+      <span className={`${base} border border-danger/40 bg-danger/10 text-danger`}>
         <span className="h-1.5 w-1.5 rounded-full bg-danger" />
         Void
       </span>
@@ -62,9 +54,7 @@ function statusBadge(s: RowStatus) {
   }
 
   return (
-    <span
-      className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}
-    >
+    <span className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}>
       <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
       Draft
     </span>
@@ -89,30 +79,37 @@ export default async function InvoicesListPage({
   const canExport = role === "ADMIN" || role === "ACCOUNTS";
   const canEdit = role !== "ACCOUNTS";
 
-  const allBills = (await listBills()) as AnyBill[];
+  // ✅ FAST: read only A..W (skip RawJson X)
+  const rowsRaw = await readRows("Invoices!A2:W");
 
-  const rows: Row[] = allBills
-    .map((b) => {
-      const dateISO =
-        (b as any).billDate ||
-        (b as any).finalizedAt ||
-        (b as any).createdAt;
-      const ts = Date.parse(dateISO as string);
+  const rows: Row[] = rowsRaw
+    .map((r: any[]) => {
+      const billNo = String(r?.[0] || "").trim();
+      const id = String(r?.[1] || "").trim();
+      const key = billNo || id;
+      if (!key) return null;
+
+      const dateISO = String(r?.[2] || "").trim();
+      const ts = Date.parse(dateISO);
+
+      let st = String(r?.[22] || "").trim().toUpperCase();
+      if (!st) st = billNo ? "FINAL" : "DRAFT";
 
       return {
-        id: (b as any).id as string | undefined,
-        billNo: (b as any).billNo as string | undefined,
-        key:
-          ((b as any).billNo as string | undefined) ??
-          ((b as any).id as string),
-        dateISO: dateISO as string,
-        ts,
-        customer: (b as any).customer?.name || "",
-        amount: Number((b as any).totals?.grandTotal || 0),
-        status: ((b as any).status as RowStatus) || "DRAFT",
-        cashier: (b as any).cashierEmail || "",
+        id: id || undefined,
+        billNo: billNo || undefined,
+        key,
+        dateISO,
+        ts: Number.isFinite(ts) ? ts : 0,
+        customer: String(r?.[3] || ""),
+        amount: Number(r?.[15] || 0),
+        status: (st as RowStatus) || "DRAFT",
+        cashier: String(r?.[21] || ""),
       };
     })
+    .filter(Boolean) as Row[];
+
+  const filtered = rows
     .filter((r) => {
       if (!(r.ts >= fromTs && r.ts < toTs)) return false;
       if (status !== "ALL" && r.status !== status) return false;
@@ -122,8 +119,8 @@ export default async function InvoicesListPage({
     })
     .sort((a, b) => b.ts - a.ts);
 
-  const totalAmount = rows.reduce((s, r) => s + r.amount, 0);
-  const finalCount = rows.filter((r) => r.status === "FINAL").length;
+  const totalAmount = filtered.reduce((s, r) => s + r.amount, 0);
+  const finalCount = filtered.filter((r) => r.status === "FINAL").length;
 
   const exportHref = `/api/reports/export?${[
     sp.from ? `from=${encodeURIComponent(sp.from)}` : "",
@@ -134,7 +131,6 @@ export default async function InvoicesListPage({
 
   return (
     <div className="space-y-5 lg:space-y-6">
-      {/* Header card */}
       <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -145,30 +141,20 @@ export default async function InvoicesListPage({
               Invoice history
             </h1>
             <p className="mt-1 text-xs text-muted sm:text-sm">
-              Search, filter and export all bills. Click any row to open the full
-              invoice view.
+              Search, filter and export all bills. Click any row to open the full invoice view.
             </p>
           </div>
 
           <div className="flex flex-col items-stretch gap-2 sm:items-end">
             <div className="flex flex-wrap justify-end gap-2 text-[11px] text-muted sm:text-xs">
               <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5">
-                Total&nbsp;
-                <span className="ml-1 font-semibold text-foreground">
-                  {rows.length}
-                </span>
+                Total <span className="ml-1 font-semibold text-foreground">{filtered.length}</span>
               </span>
               <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5">
-                Final&nbsp;
-                <span className="ml-1 font-semibold text-foreground">
-                  {finalCount}
-                </span>
+                Final <span className="ml-1 font-semibold text-foreground">{finalCount}</span>
               </span>
               <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5">
-                Filtered total&nbsp;
-                <span className="ml-1 font-semibold text-foreground">
-                  {inr(totalAmount)}
-                </span>
+                Filtered total <span className="ml-1 font-semibold text-foreground">{inr(totalAmount)}</span>
               </span>
             </div>
             <Link
@@ -181,19 +167,16 @@ export default async function InvoicesListPage({
         </div>
       </section>
 
-      {/* Filter bar */}
       <form
         className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-4"
         action="/invoices"
         method="GET"
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          {/* Search */}
           <div className="md:flex-1">
             <label className="text-[11px] font-medium uppercase tracking-wide text-muted">
-              Search
+              Search{" "}
               <span className="font-normal normal-case text-[11px] text-muted">
-                {" "}
                 (bill no / customer / cashier)
               </span>
             </label>
@@ -205,12 +188,9 @@ export default async function InvoicesListPage({
             />
           </div>
 
-          {/* Right side filters */}
           <div className="flex flex-wrap gap-3 md:justify-end">
             <div className="w-full min-w-[150px] md:w-auto">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                From
-              </label>
+              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">From</label>
               <input
                 name="from"
                 type="date"
@@ -220,9 +200,7 @@ export default async function InvoicesListPage({
             </div>
 
             <div className="w-full min-w-[150px] md:w-auto">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                To
-              </label>
+              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">To</label>
               <input
                 name="to"
                 type="date"
@@ -232,9 +210,7 @@ export default async function InvoicesListPage({
             </div>
 
             <div className="w-full min-w-[140px] md:w-auto">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                Status
-              </label>
+              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Status</label>
               <select
                 name="status"
                 defaultValue={status}
@@ -267,16 +243,15 @@ export default async function InvoicesListPage({
         </div>
       </form>
 
-      {/* List – flat list style, not box-box */}
       <section className="rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
-        {rows.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="rounded-xl bg-background/70 p-4 text-center text-xs text-muted sm:text-sm">
             No invoices match your filters yet.
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
             <div className="divide-y divide-border/40">
-              {rows.map((r, idx) => {
+              {filtered.map((r, idx) => {
                 const dateObj = new Date(r.dateISO);
                 const isValid = !Number.isNaN(dateObj.getTime());
                 const dateStr = isValid
@@ -294,7 +269,6 @@ export default async function InvoicesListPage({
                   : "";
 
                 const label = r.billNo || r.id || r.key;
-                const firstChar = (label || "#").toString().charAt(0);
                 const serial = idx + 1;
 
                 return (
@@ -302,9 +276,7 @@ export default async function InvoicesListPage({
                     key={r.key}
                     className="group flex flex-col gap-3 px-3.5 py-3 text-xs transition hover:bg-card/90 sm:flex-row sm:items-center sm:justify-between sm:px-4"
                   >
-                    {/* Left: main info */}
                     <div className="flex flex-1 items-start gap-3">
-                      {/* Serial number circle */}
                       <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
                         {serial}
                       </div>
@@ -318,9 +290,7 @@ export default async function InvoicesListPage({
                           </Link>
                           {statusBadge(r.status)}
                         </div>
-                        <div className="text-[11px] text-muted">
-                          {r.customer || "Walk-in customer"}
-                        </div>
+                        <div className="text-[11px] text-muted">{r.customer || "Walk-in customer"}</div>
                         <div className="flex flex-wrap gap-2 text-[10px] text-muted">
                           <span>{dateStr}</span>
                           {timeStr && (
@@ -339,11 +309,8 @@ export default async function InvoicesListPage({
                       </div>
                     </div>
 
-                    {/* Right: amount + actions */}
                     <div className="flex flex-col items-end gap-2 sm:min-w-[230px]">
-                      <div className="text-right text-sm font-semibold text-foreground">
-                        {inr(r.amount)}
-                      </div>
+                      <div className="text-right text-sm font-semibold text-foreground">{inr(r.amount)}</div>
                       <div className="flex flex-wrap justify-end gap-1 text-[11px]">
                         <Link
                           className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
@@ -353,18 +320,14 @@ export default async function InvoicesListPage({
                         </Link>
                         <Link
                           className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                          href={`/invoices/${encodeURIComponent(
-                            r.key
-                          )}?print=1`}
+                          href={`/invoices/${encodeURIComponent(r.key)}?print=1`}
                         >
                           Print
                         </Link>
                         {canEdit && r.status === "DRAFT" && (
                           <Link
                             className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                            href={`/billing?edit=${encodeURIComponent(
-                              r.key
-                            )}`}
+                            href={`/billing?edit=${encodeURIComponent(r.key)}`}
                           >
                             Edit draft
                           </Link>

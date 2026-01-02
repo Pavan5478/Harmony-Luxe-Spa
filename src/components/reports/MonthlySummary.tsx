@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { inr } from "@/lib/format";
 
 type Summary = {
@@ -175,12 +176,13 @@ export default function MonthlySummary() {
 
           {/* Links */}
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs sm:text-sm">
-            <a
+            <Link
               className="inline-flex items-center rounded-full border border-border bg-background px-3 py-2 font-medium text-foreground hover:bg-card"
               href={linkToInvoices}
+              prefetch
             >
               View invoices for {month}
-            </a>
+            </Link>
             <a
               className="inline-flex items-center rounded-full border border-border bg-background px-3 py-2 font-medium text-foreground hover:bg-card"
               href={exportHref}

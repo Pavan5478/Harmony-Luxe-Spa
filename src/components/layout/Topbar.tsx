@@ -1,14 +1,15 @@
 ﻿﻿// src/components/layout/Topbar.tsx
 "use client";
 
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
+  MouseEvent as ReactMouseEvent,
   useEffect,
   useMemo,
   useRef,
   useState,
-  MouseEvent as ReactMouseEvent,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { inr } from "@/lib/format";
 
 type Role = "ADMIN" | "CASHIER" | "ACCOUNTS" | null;
@@ -29,28 +30,47 @@ type InvoiceStats = {
   draftAmount: number;
 };
 
+function isActivePath(pathname: string, href: string) {
+  if (!pathname) return false;
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 export default function Topbar() {
   const router = useRouter();
   const pathname = usePathname();
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(null);
+
   const [menuOpen, setMenuOpen] = useState(false);
-  // default = DARK (black + gold). Toggle can switch to LIGHT.
+  const [statsOpen, setStatsOpen] = useState(false);
+
+  // default dark (theme-dark class = dark theme)
   const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   const [todayLabel, setTodayLabel] = useState("");
   const [invoiceStats, setInvoiceStats] = useState<InvoiceStats | null>(null);
-  const [statsOpen, setStatsOpen] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const statsRef = useRef<HTMLDivElement | null>(null);
 
-  // fetch identity
+  // Close overlays on route change
   useEffect(() => {
+    setMenuOpen(false);
+    setStatsOpen(false);
+  }, [pathname]);
+
+  // Fetch identity
+  useEffect(() => {
+    const ac = new AbortController();
+
     (async () => {
       try {
-        const r = await fetch("/api/me", { cache: "no-store" });
+        const r = await fetch("/api/me", {
+          cache: "no-store",
+          signal: ac.signal,
+        });
         const j = r.ok ? await r.json() : {};
         setEmail(j?.email || "");
         setRole((j?.role as Role) ?? null);
@@ -58,14 +78,22 @@ export default function Topbar() {
         // ignore
       }
     })();
+
+    return () => ac.abort();
   }, []);
 
-  // fetch recent invoices for topbar stats
+  // Fetch recent invoices for stats
   useEffect(() => {
+    const ac = new AbortController();
+
     (async () => {
       try {
-        const r = await fetch("/api/invoices/recent", { cache: "no-store" });
+        const r = await fetch("/api/invoices/recent", {
+          cache: "no-store",
+          signal: ac.signal,
+        });
         if (!r.ok) return;
+
         const j = await r.json();
         const items = (j.items ?? []) as {
           billNo?: string;
@@ -75,26 +103,10 @@ export default function Topbar() {
         }[];
 
         const now = new Date();
-        const startToday = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate()
-        );
-        const startTomorrow = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1
-        );
-        const startYesterday = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - 1
-        );
-        const startWeek = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - 6
-        ); // last 7 days including today
+        const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        const startYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
 
         let todayCount = 0;
         let todayAmount = 0;
@@ -143,12 +155,14 @@ export default function Topbar() {
           draftAmount,
         });
       } catch {
-        // ignore – topbar still works without stats
+        // ignore
       }
     })();
+
+    return () => ac.abort();
   }, []);
 
-  // today label
+  // Today label
   useEffect(() => {
     const d = new Date();
     setTodayLabel(
@@ -160,59 +174,58 @@ export default function Topbar() {
     );
   }, []);
 
-  // init theme from localStorage (default to dark)
+  // Init theme from <html> class (server decides initial via cookie)
   useEffect(() => {
-  if (typeof window === "undefined") return;
-  const root = document.documentElement;
-  setTheme(root.classList.contains("theme-dark") ? "dark" : "light");
-}, []);
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+    setTheme(root.classList.contains("theme-dark") ? "dark" : "light");
+  }, []);
 
   function toggleTheme() {
-  setTheme((prev) => {
-    const next = prev === "light" ? "dark" : "light";
-    if (typeof window !== "undefined") {
-      const root = window.document.documentElement;
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
 
+      const root = document.documentElement;
       if (next === "dark") root.classList.add("theme-dark");
       else root.classList.remove("theme-dark");
 
-      // localStorage (optional)
-      window.localStorage.setItem("bb.theme", next);
+      // optional
+      try {
+        window.localStorage.setItem("bb.theme", next);
+      } catch {
+        // ignore
+      }
 
-      // ✅ cookie (this is what fixes SSR hydration)
+      // important for SSR hydration/persist
       document.cookie = `bb.theme=${next}; path=/; max-age=31536000; samesite=lax`;
-    }
-    return next;
-  });
-}
+
+      return next;
+    });
+  }
 
   async function doLogout() {
     try {
       await fetch("/api/logout", { method: "POST" });
     } catch {}
+
     try {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("bb.email");
-      }
+      window.localStorage.removeItem("bb.email");
     } catch {}
+
     router.replace("/login");
   }
 
   function onMenuBackgroundClick(e: ReactMouseEvent<HTMLDivElement>) {
-    if (e.target === e.currentTarget) {
-      setMenuOpen(false);
-    }
+    if (e.target === e.currentTarget) setMenuOpen(false);
   }
 
-  // close stats popover when clicking outside
+  // Close stats popover when clicking outside
   useEffect(() => {
     if (!statsOpen) return;
 
     function handleClick(e: MouseEvent) {
       if (!statsRef.current) return;
-      if (!statsRef.current.contains(e.target as Node)) {
-        setStatsOpen(false);
-      }
+      if (!statsRef.current.contains(e.target as Node)) setStatsOpen(false);
     }
 
     document.addEventListener("mousedown", handleClick);
@@ -241,7 +254,6 @@ export default function Topbar() {
         { href: "/settings", label: "Settings" },
       ];
     }
-    // CASHIER / unknown
     return [
       { href: "/dashboard", label: "Dashboard" },
       { href: "/billing", label: "Billing" },
@@ -250,16 +262,14 @@ export default function Topbar() {
     ];
   }, [role]);
 
-  // Label under logo: basic section name
   const currentLabel = useMemo(() => {
-    if (!pathname || pathname === "/dashboard" || pathname === "/") {
-      return "Dashboard overview";
-    }
+    if (!pathname || pathname === "/dashboard" || pathname === "/") return "Dashboard overview";
     if (pathname.startsWith("/billing")) return "Billing";
     if (pathname.startsWith("/invoices")) return "Invoices";
     if (pathname.startsWith("/menu")) return "Menu";
     if (pathname.startsWith("/reports")) return "Reports";
     if (pathname.startsWith("/settings")) return "Settings";
+    if (pathname.startsWith("/expenses")) return "Expenses";
     return "Workspace";
   }, [pathname]);
 
@@ -275,9 +285,8 @@ export default function Topbar() {
   return (
     <header className="no-print sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center px-3 sm:h-16 sm:px-4 lg:px-6">
-        {/* Left: mobile menu + brand */}
+        {/* Left */}
         <div className="flex flex-1 items-center gap-2">
-          {/* Mobile menu button */}
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
@@ -294,9 +303,9 @@ export default function Topbar() {
             </svg>
           </button>
 
-          {/* Brand */}
-          <a
+          <Link
             href="/dashboard"
+            prefetch
             className="flex items-center gap-2 text-sm font-semibold text-foreground"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-xs text-primary shadow-sm">
@@ -306,28 +315,19 @@ export default function Topbar() {
               <span className="text-xs font-semibold">Harmony Luxe</span>
               <span className="text-[10px] text-muted">{currentLabel}</span>
             </div>
-          </a>
+          </Link>
         </div>
 
-        {/* Center: date + invoice pulse (desktop) */}
+        {/* Center */}
         <div className="hidden flex-1 items-center justify-center md:flex">
-          <div
-            ref={statsRef}
-            className="relative"
-          >
+          <div ref={statsRef} className="relative">
             <button
               type="button"
               onClick={() => setStatsOpen((v) => !v)}
               className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] text-muted shadow-sm hover:border-primary/40 hover:text-foreground"
             >
               <span className="inline-flex items-center gap-1">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  aria-hidden
-                  className="text-primary"
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden className="text-primary">
                   <path
                     d="M4 5h16M5 3v4M19 3v4M5 21h14a1 1 0 0 0 1-1V8H4v12a1 1 0 0 0 1 1Z"
                     fill="none"
@@ -336,9 +336,7 @@ export default function Topbar() {
                     strokeLinecap="round"
                   />
                 </svg>
-                <span className="font-medium text-foreground">
-                  {todayLabel || "Today"}
-                </span>
+                <span className="font-medium text-foreground">{todayLabel || "Today"}</span>
               </span>
 
               {invoiceStats && (
@@ -364,9 +362,7 @@ export default function Topbar() {
                 height="14"
                 viewBox="0 0 24 24"
                 aria-hidden
-                className={`transition-transform ${
-                  statsOpen ? "rotate-180" : ""
-                }`}
+                className={`transition-transform ${statsOpen ? "rotate-180" : ""}`}
               >
                 <path
                   d="M7 10l5 5 5-5"
@@ -379,24 +375,20 @@ export default function Topbar() {
               </svg>
             </button>
 
-            {/* Popover with detailed stats */}
             {statsOpen && (
               <div className="absolute left-1/2 z-50 mt-2 w-80 -translate-x-1/2 rounded-2xl border border-border bg-card p-3 text-[11px] text-muted shadow-lg">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="font-medium text-foreground">
-                    Invoice activity
-                  </span>
-                  <span className="text-[10px] text-muted">
-                    Last 7 days snapshot
-                  </span>
+                  <span className="font-medium text-foreground">Invoice activity</span>
+                  <span className="text-[10px] text-muted">Last 7 days snapshot</span>
                 </div>
 
                 {invoiceStats ? (
                   <div className="space-y-2">
-                    {/* Today / Yesterday */}
                     <div className="grid grid-cols-2 gap-2">
-                      <a
+                      <Link
                         href="/invoices?range=today"
+                        prefetch
+                        onClick={() => setStatsOpen(false)}
                         className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
                       >
                         <div className="flex items-center justify-between gap-1">
@@ -404,17 +396,17 @@ export default function Topbar() {
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                             Today
                           </span>
-                          <span className="text-[10px] text-muted">
-                            {invoiceStats.todayCount} inv
-                          </span>
+                          <span className="text-[10px] text-muted">{invoiceStats.todayCount} inv</span>
                         </div>
                         <div className="mt-1 text-xs font-semibold text-foreground">
                           {inr(invoiceStats.todayAmount)}
                         </div>
-                      </a>
+                      </Link>
 
-                      <a
+                      <Link
                         href="/invoices?range=yesterday"
+                        prefetch
+                        onClick={() => setStatsOpen(false)}
                         className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
                       >
                         <div className="flex items-center justify-between gap-1">
@@ -422,20 +414,19 @@ export default function Topbar() {
                             <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
                             Yesterday
                           </span>
-                          <span className="text-[10px] text-muted">
-                            {invoiceStats.yesterdayCount} inv
-                          </span>
+                          <span className="text-[10px] text-muted">{invoiceStats.yesterdayCount} inv</span>
                         </div>
                         <div className="mt-1 text-xs font-semibold text-foreground">
                           {inr(invoiceStats.yesterdayAmount)}
                         </div>
-                      </a>
+                      </Link>
                     </div>
 
-                    {/* Last 7 days / Drafts */}
                     <div className="grid grid-cols-2 gap-2">
-                      <a
+                      <Link
                         href="/invoices?range=last7"
+                        prefetch
+                        onClick={() => setStatsOpen(false)}
                         className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
                       >
                         <div className="flex items-center justify-between gap-1">
@@ -443,17 +434,17 @@ export default function Topbar() {
                             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                             Last 7 days
                           </span>
-                          <span className="text-[10px] text-muted">
-                            {invoiceStats.weekCount} inv
-                          </span>
+                          <span className="text-[10px] text-muted">{invoiceStats.weekCount} inv</span>
                         </div>
                         <div className="mt-1 text-xs font-semibold text-foreground">
                           {inr(invoiceStats.weekAmount)}
                         </div>
-                      </a>
+                      </Link>
 
-                      <a
+                      <Link
                         href="/invoices?status=draft"
+                        prefetch
+                        onClick={() => setStatsOpen(false)}
                         className="group rounded-xl border border-border bg-background px-2.5 py-1.5 transition hover:border-primary/40 hover:bg-card"
                       >
                         <div className="flex items-center justify-between gap-1">
@@ -461,42 +452,36 @@ export default function Topbar() {
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                             Drafts
                           </span>
-                          <span className="text-[10px] text-muted">
-                            {invoiceStats.draftCount} inv
-                          </span>
+                          <span className="text-[10px] text-muted">{invoiceStats.draftCount} inv</span>
                         </div>
                         <div className="mt-1 text-xs font-semibold text-foreground">
                           {inr(invoiceStats.draftAmount)}
                         </div>
-                      </a>
+                      </Link>
                     </div>
 
                     <div className="mt-1 flex items-center justify-between text-[10px] text-muted">
-                      <span>
-                        Click a card to open the Invoices screen with that
-                        focus.
-                      </span>
-                      <a
+                      <span>Click a card to open Invoices with that focus.</span>
+                      <Link
                         href="/invoices"
+                        prefetch
+                        onClick={() => setStatsOpen(false)}
                         className="text-[10px] font-medium text-primary hover:underline"
                       >
                         View all
-                      </a>
+                      </Link>
                     </div>
                   </div>
                 ) : (
-                  <div className="py-3 text-[11px] text-muted">
-                    Loading invoice activity…
-                  </div>
+                  <div className="py-3 text-[11px] text-muted">Loading invoice activity…</div>
                 )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right: theme toggle + user */}
+        {/* Right */}
         <div className="flex flex-1 items-center justify-end gap-2">
-          {/* Theme toggle */}
           <button
             type="button"
             onClick={toggleTheme}
@@ -504,16 +489,8 @@ export default function Topbar() {
             aria-label="Toggle theme"
           >
             {theme === "dark" ? (
-              // sun icon
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="4"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                />
+                <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8" fill="none" />
                 <path
                   d="M12 3v2.5M12 18.5V21M4.22 4.22l1.77 1.77M17.99 17.99l1.79 1.79M3 12h2.5M18.5 12H21M4.22 19.78l1.77-1.77M17.99 6.01l1.79-1.79"
                   stroke="currentColor"
@@ -522,7 +499,6 @@ export default function Topbar() {
                 />
               </svg>
             ) : (
-              // moon icon
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
                 <path
                   d="M19 14.5A7.5 7.5 0 0 1 10.5 6 6 6 0 1 0 19 14.5Z"
@@ -535,17 +511,11 @@ export default function Topbar() {
             )}
           </button>
 
-          {/* User info (desktop) */}
           <div className="hidden flex-col items-end leading-tight md:flex">
-            <span className="max-w-[180px] truncate text-xs font-medium text-foreground">
-              {email || "—"}
-            </span>
-            <span className="text-[10px] text-muted">
-              {roleLabel || "Staff"}
-            </span>
+            <span className="max-w-[180px] truncate text-xs font-medium text-foreground">{email || "—"}</span>
+            <span className="text-[10px] text-muted">{roleLabel || "Staff"}</span>
           </div>
 
-          {/* Logout button */}
           <button
             type="button"
             onClick={doLogout}
@@ -568,10 +538,7 @@ export default function Topbar() {
 
       {/* Mobile menu overlay */}
       {menuOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 lg:hidden"
-          onClick={onMenuBackgroundClick}
-        >
+        <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={onMenuBackgroundClick}>
           <div
             ref={menuRef}
             className="absolute left-0 right-0 top-0 mx-auto mt-2 w-[92%] max-w-sm rounded-2xl border border-border bg-card p-3 shadow-lg"
@@ -582,14 +549,11 @@ export default function Topbar() {
                   XS
                 </div>
                 <div className="flex flex-col leading-tight">
-                  <span className="text-xs font-semibold text-foreground">
-                    Harmony Luxe
-                  </span>
-                  <span className="text-[10px] text-muted">
-                    {roleLabel || "Staff"}
-                  </span>
+                  <span className="text-xs font-semibold text-foreground">Harmony Luxe</span>
+                  <span className="text-[10px] text-muted">{roleLabel || "Staff"}</span>
                 </div>
               </div>
+
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
@@ -609,30 +573,29 @@ export default function Topbar() {
 
             <div className="mt-2 space-y-1">
               {navLinks.map((link) => {
-                const active =
-                  pathname === link.href ||
-                  (pathname || "").startsWith(link.href + "/");
+                const active = isActivePath(pathname ?? "", link.href);
+
                 return (
-                  <a
+                  <Link
                     key={link.href}
                     href={link.href}
+                    prefetch
                     onClick={() => setMenuOpen(false)}
+                    aria-current={active ? "page" : undefined}
                     className={[
-                      "flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm",
-                      active
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted hover:bg-background hover:text-foreground",
+                      "flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-semibold transition",
+                      active ? "bg-primary/10 text-primary" : "text-muted hover:bg-background hover:text-foreground",
                     ].join(" ")}
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 );
               })}
 
               <button
                 type="button"
                 onClick={doLogout}
-                className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-danger hover:bg-danger/10"
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm font-semibold text-danger hover:bg-danger/10"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
                   <path

@@ -10,7 +10,6 @@ import {
 } from "@/store/bills";
 import { moveInvoiceToDeleted } from "@/lib/sheets";
 
-// Next 15+/16: params is a Promise
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -55,11 +54,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const status = (existing as any).status as
-    | "DRAFT"
-    | "FINAL"
-    | "VOID"
-    | undefined;
+  const status = (existing as any).status as "DRAFT" | "FINAL" | "VOID" | undefined;
 
   if (status === "FINAL" || status === "VOID") {
     return NextResponse.json(
@@ -94,7 +89,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   const idOrNo = await decodeId(ctx);
   const body = (await req.json().catch(() => ({}))) as any;
 
-  // 1) mark printed (used from invoice screen)
+  // 1) mark printed
   if (body?.markPrinted) {
     try {
       const b = await markPrinted(idOrNo);
@@ -105,11 +100,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
   }
 
-  // 2) finalize draft -> FINAL (Sheets is updated inside finalizeDraft)
+  // 2) finalize draft -> FINAL
   const cashierEmail: string =
-    body?.cashierEmail ||
-    session.user.email ||
-    "unknown@example.com";
+    body?.cashierEmail || session.user.email || "unknown@example.com";
 
   try {
     const fin = await finalizeDraft(idOrNo, cashierEmail);
@@ -121,7 +114,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   }
 }
 
-// DELETE – admin only, void invoice + move to Deleted sheet
+// DELETE – admin only
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   const session = await getSession();
   const role = session.user?.role;
@@ -140,16 +133,9 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   }
 
   try {
-    // Mark status = VOID in store / Sheets (for audit history)
     const voided = await voidBill(idOrNo);
 
-    // Key used to locate row in Invoices sheet
-    const key =
-      (bill as any).billNo ||
-      (bill as any).id ||
-      idOrNo;
-
-    // Move the row to Deleted sheet and remove from Invoices
+    const key = (bill as any).billNo || (bill as any).id || idOrNo;
     await moveInvoiceToDeleted(key);
 
     return NextResponse.json({ ok: true, bill: voided });

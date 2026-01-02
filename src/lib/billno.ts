@@ -1,5 +1,5 @@
 ﻿// src/lib/billno.ts
-import { loadBillsFromSheet } from "./sheets";
+import { readRows } from "./sheets";
 
 /**
  * Compute current financial year string, e.g. "2025-26".
@@ -9,11 +9,9 @@ function getFinancialYear(date = new Date()): string {
   const year = date.getFullYear();
   const month = date.getMonth(); // 0 = Jan
   if (month >= 3) {
-    // April or later
     const next = String((year + 1) % 100).padStart(2, "0");
     return `${year}-${next}`;
   }
-  // Jan–Mar belongs to previous FY
   const prev = year - 1;
   const next = String(year % 100).padStart(2, "0");
   return `${prev}-${next}`;
@@ -24,23 +22,23 @@ function getFinancialYear(date = new Date()): string {
  *   {FY}/{6-digit sequence}
  * Example:
  *   2025-26/000123
+ *
+ * ✅ FAST: reads only Invoices!A2:A (bill numbers column)
  */
 export async function nextBillNo(): Promise<string> {
   const fy = getFinancialYear();
   const prefix = `${fy}/`;
 
-  const bills = await loadBillsFromSheet();
+  const colA = await readRows("Invoices!A2:A"); // only bill numbers
   let maxSeq = 0;
 
-  for (const b of bills) {
-    const billNo = String(b.billNo || "").trim();
+  for (const r of colA) {
+    const billNo = String(r?.[0] || "").trim();
     if (!billNo.startsWith(prefix)) continue;
 
     const tail = billNo.slice(prefix.length);
     const n = parseInt(tail, 10);
-    if (!Number.isNaN(n) && n > maxSeq) {
-      maxSeq = n;
-    }
+    if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
   }
 
   const nextSeq = maxSeq + 1;
@@ -49,9 +47,7 @@ export async function nextBillNo(): Promise<string> {
 }
 
 // ─────────────────────────────────────────────
-// Admin counter helpers (simple in-memory stub)
-// These exist so /api/admin/reset & dev-reset can build.
-// They do NOT affect how `nextBillNo` currently works.
+// Admin counter helpers (kept as-is)
 // ─────────────────────────────────────────────
 
 export type BillCounterState = {
@@ -66,7 +62,6 @@ function deriveDefaultFinYear(): string {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  // Indian FY: Apr–Mar
   let startYear = year;
   if (month < 4) startYear = year - 1;
 
@@ -86,23 +81,18 @@ async function ensureCounter(): Promise<BillCounterState> {
   return __bbCounterCache;
 }
 
-// Used by /api/admin/reset
 export async function getCounter(): Promise<BillCounterState> {
   return ensureCounter();
 }
-
 export async function setFinYear(finYear: string): Promise<void> {
   const current = await ensureCounter();
   __bbCounterCache = { ...current, finYear };
 }
-
 export async function setNextSeq(nextSeq: number): Promise<void> {
   const current = await ensureCounter();
   __bbCounterCache = { ...current, nextSeq };
 }
-
 export async function resetCounter(): Promise<void> {
-  // Reset to default FY & sequence 1
   __bbCounterCache = null;
   await ensureCounter();
 }
