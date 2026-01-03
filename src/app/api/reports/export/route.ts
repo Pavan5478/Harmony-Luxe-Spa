@@ -1,16 +1,30 @@
+// src/app/api/reports/export/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { readRows } from "@/lib/sheets";
 import { toCsv } from "@/lib/csv";
 
-function getDateIndex(header: string[]) {
-  const ix = header.findIndex(h => String(h).trim().toLowerCase() === "dateiso");
-  return ix >= 0 ? ix : 1; // fallback to column B
+export const dynamic = "force-dynamic";
+
+function norm(s: unknown) {
+  return String(s ?? "").trim().toLowerCase();
+}
+
+function getColIndex(header: string[], name: string, fallback: number) {
+  const ix = header.findIndex((h) => norm(h) === norm(name));
+  return ix >= 0 ? ix : fallback;
+}
+
+function parseYmdToTs(ymd: string | null) {
+  if (!ymd) return null;
+  // Treat YYYY-MM-DD as start-of-day (local-ish), but stable for filtering ISO strings
+  const ts = Date.parse(`${ymd}T00:00:00.000Z`);
+  return Number.isFinite(ts) ? ts : null;
 }
 
 /**
- * GET /api/reports/export?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Returns text/csv of invoices stored in the "Invoices" sheet.
+ * GET /api/reports/export?from=YYYY-MM-DD&to=YYYY-MM-DD&status=FINAL|DRAFT|VOID|ALL
+ * Returns CSV of Invoices sheet rows filtered by dateISO and optional status if column exists.
  * Visible to ADMIN and ACCOUNTS only.
  */
 export async function GET(req: Request) {
@@ -22,33 +36,50 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const from = url.searchParams.get("from"); // inclusive
-  const to = url.searchParams.get("to");     // inclusive
+  const to = url.searchParams.get("to"); // inclusive
+  const status = (url.searchParams.get("status") || "ALL").toUpperCase();
 
-  const fromTs = from ? Date.parse(from) : Number.NEGATIVE_INFINITY;
-  const toTs   = to   ? Date.parse(to) + 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
+  const fromTs = parseYmdToTs(from) ?? Number.NEGATIVE_INFINITY;
+  const toTsInclusive = parseYmdToTs(to);
+  const toTsExclusive =
+    toTsInclusive != null ? toTsInclusive + 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 
-  // Read header + rows (assumes A1 = header row, A2.. = data).
   const all = await readRows("Invoices!A1:Z");
-  const header = (all[0] as any[]) || [];
-  const rows = (all.slice(1) as any[][]) || [];
+  const header = (all[0] as any[])?.map(String) ?? [];
+  const rows = (all.slice(1) as any[][]) ?? [];
 
-  // Detect which column is dateISO
-  const dateIx = getDateIndex(header as string[]);
+  const dateIx = getColIndex(header, "dateiso", 1); // fallback to B
+  const statusIx = getColIndex(header, "status", -1); // optional
 
-  const filtered = rows.filter(r => {
-    const ts = Date.parse(String(r[dateIx] ?? ""));
-    return Number.isFinite(ts) ? ts >= fromTs && ts < toTs : true; // keep if not parseable
+  const filtered = rows.filter((r) => {
+    const raw = String(r[dateIx] ?? "");
+    const ts = Date.parse(raw);
+    const inRange = Number.isFinite(ts) ? ts >= fromTs && ts < toTsExclusive : true;
+
+    if (!inRange) return false;
+
+    if (status !== "ALL" && statusIx >= 0) {
+      const rowStatus = String(r[statusIx] ?? "").toUpperCase().trim();
+      if (rowStatus && rowStatus !== status) return false;
+    }
+
+    return true;
   });
 
-  const csv = toCsv(filtered, header as string[]);
+  const csvRaw = toCsv(filtered, header);
+  // Add BOM for Excel UTF-8 friendliness
+  const csv = "\ufeff" + csvRaw;
 
-  const fname = `invoices_${from || "all"}_${to || "all"}.csv`.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const fname = `invoices_${from || "all"}_${to || "all"}_${status || "ALL"}.csv`.replace(
+    /[^a-zA-Z0-9._-]/g,
+    "_"
+  );
 
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${fname}"`,
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-store",
     },
   });
 }
