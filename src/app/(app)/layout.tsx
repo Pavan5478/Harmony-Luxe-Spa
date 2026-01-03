@@ -1,4 +1,3 @@
-﻿﻿// src/app/(app)/layout.tsx
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import ThemeCookieInit from "@/components/layout/ThemeCookieInit";
@@ -14,17 +13,14 @@ export default async function ProtectedLayout({
   if (!session.user) redirect("/login");
 
   return (
-    <div className="app-shell">
-      {/* ✅ Auto-init theme cookie on first load (client) */}
+    <div className="min-h-screen w-full overflow-x-clip">
       <ThemeCookieInit />
-
-      {/* Fixed sidebar (desktop) */}
       <Sidebar />
 
-      {/* Main column */}
-      <div className="flex min-h-screen flex-1 flex-col lg:ml-64">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-64">
         <Topbar />
-        <main className="app-main">
+
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       </div>

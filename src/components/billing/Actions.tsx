@@ -223,8 +223,8 @@ export default function BillingActions({
       // 2) finalize the draft in backend (DRAFT -> FINAL + BillNo)
       const email =
         typeof window !== "undefined"
-          ? localStorage.getItem("bb.email") || "cashier@example.com"
-          : "cashier@example.com";
+          ? localStorage.getItem("bb.email") || "cashier@harmoneyluxe.com"
+          : "cashier@harmoneyluxe.com";
 
       const resFin = await fetch(`/api/bills/${encodeURIComponent(draftId)}`, {
         method: "PATCH",

@@ -1,18 +1,9 @@
 @import "tailwindcss";
 
-/* ───────────────────────────────────────────────────────────
-   DESIGN TOKENS
-   Gold + Black CRM theme
-   - Default = LIGHT (accessibility tuned)
-   - Add `.theme-dark` on <html> for black+gold UI
-   Tailwind v4 uses @theme; VSCode may warn unless you ignore unknown at-rules.
-   ─────────────────────────────────────────────────────────── */
-
 :root {
   color-scheme: light;
 
-  /* primary – warm gold palette */
-  --primary-50:  #fff9e6;
+  --primary-50: #fff9e6;
   --primary-100: #feefbf;
   --primary-200: #fde28c;
   --primary-300: #fbd45a;
@@ -23,8 +14,7 @@
   --primary-800: #82580a;
   --primary-900: #5c3c07;
 
-  /* neutrals (slate-ish) */
-  --gray-50:  #f8fafc;
+  --gray-50: #f8fafc;
   --gray-100: #f1f5f9;
   --gray-200: #e2e8f0;
   --gray-300: #cbd5e1;
@@ -35,109 +25,91 @@
   --gray-800: #1f2937;
   --gray-900: #0f172a;
 
-  /* semantic */
   --success: #16a34a;
   --warning: #d97706;
-  --danger:  #dc2626;
-  --info:    #0284c7;
+  --danger: #dc2626;
+  --info: #0284c7;
 
-  /* ── LIGHT surfaces (high contrast, clean) ── */
-  --bg:        #f8fafc;      /* clean near-white */
-  --fg:        #0f172a;      /* slate-900 */
-  --muted:     #475569;      /* slate-600 */
-  --muted-2:   #64748b;      /* slate-500 */
+  --bg: #f8fafc;
+  --fg: #0f172a;
+  --muted: #475569;
+  --muted-2: #64748b;
 
-  --card:      #ffffff;
-  --card-2:    #f1f5f9;      /* subtle surface */
+  --card: #ffffff;
+  --card-2: #f1f5f9;
 
-  /* Borders: keep subtle but visible on white */
-  --border:    rgba(15, 23, 42, 0.12);
-  --border-2:  rgba(15, 23, 42, 0.18);
+  --border: rgba(15, 23, 42, 0.12);
+  --border-2: rgba(15, 23, 42, 0.18);
 
-  /* Rings: accessible */
-  --ring:      rgba(200, 146, 18, 0.60);
+  --ring: rgba(200, 146, 18, 0.6);
 
-  /* Derived UI tokens */
-  --primary-ui:       var(--primary-800); /* darker gold for light UI */
-  --on-primary:       #0b0f1a;
-  --link:             #7a540a;           /* readable gold-brown on white */
+  --primary-ui: var(--primary-800);
+  --on-primary: #0b0f1a;
+  --link: #7a540a;
 
-  /* chrome */
-  --chrome-bg:        rgba(248, 250, 252, 0.86);
-  --chrome-border:    rgba(15, 23, 42, 0.10);
+  --chrome-bg: rgba(248, 250, 252, 0.86);
+  --chrome-border: rgba(15, 23, 42, 0.1);
 
-  /* input */
-  --input-bg:         #ffffff;
-  --input-border:     rgba(15, 23, 42, 0.18);
+  --input-bg: #ffffff;
+  --input-border: rgba(15, 23, 42, 0.18);
   --input-border-hover: rgba(15, 23, 42, 0.26);
 
-  /* table hover */
-  --row-hover:        rgba(2, 6, 23, 0.035);
+  --row-hover: rgba(2, 6, 23, 0.035);
 
-  /* shadows */
   --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.08);
   --shadow-md: 0 18px 40px rgba(2, 6, 23, 0.14);
 
-  /* shapes */
   --radius-xs: 0.425rem;
   --radius-sm: 0.55rem;
   --radius-md: 0.9rem;
   --radius-lg: 1.25rem;
 
-  /* typography */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text",
-    Segoe UI, Roboto, Inter, "Noto Sans", "Helvetica Neue", Arial,
-    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", Segoe UI,
+    Roboto, Inter, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji",
+    "Segoe UI Emoji";
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", monospace;
 
-  /* background glow (very subtle on light) */
   --bg-grad-1: rgba(200, 146, 18, 0.08);
   --bg-grad-2: rgba(148, 163, 184, 0.08);
 }
 
-/* ───────────────────────────────────────────
-   DARK (your main black + gold theme)
-   ─────────────────────────────────────────── */
 .theme-dark {
   color-scheme: dark;
 
-  --bg:        #050509;
-  --fg:        #f9fafb;
-  --muted:     #a3a3ad;
-  --muted-2:   #c0c0c8;
+  --bg: #050509;
+  --fg: #f9fafb;
+  --muted: #a3a3ad;
+  --muted-2: #c0c0c8;
 
-  --card:      #0b0b10;
-  --card-2:    #14141c;
+  --card: #0b0b10;
+  --card-2: #14141c;
 
-  --border:    rgba(248, 191, 64, 0.24);
-  --border-2:  rgba(248, 191, 64, 0.36);
+  --border: rgba(248, 191, 64, 0.24);
+  --border-2: rgba(248, 191, 64, 0.36);
 
-  --ring:      rgba(242, 195, 64, 0.76);
+  --ring: rgba(242, 195, 64, 0.76);
 
   --primary-ui: var(--primary-400);
   --on-primary: #0b0b10;
-  --link:       var(--primary-300);
+  --link: var(--primary-300);
 
-  --chrome-bg:     rgba(5, 5, 9, 0.82);
+  --chrome-bg: rgba(5, 5, 9, 0.82);
   --chrome-border: rgba(248, 191, 64, 0.16);
 
-  --input-bg:      rgba(20, 20, 28, 0.92);
-  --input-border:  rgba(148, 163, 184, 0.30);
+  --input-bg: rgba(20, 20, 28, 0.92);
+  --input-border: rgba(148, 163, 184, 0.3);
   --input-border-hover: rgba(148, 163, 184, 0.44);
 
-  --row-hover:     rgba(148, 163, 184, 0.08);
+  --row-hover: rgba(148, 163, 184, 0.08);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.65);
-  --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.90);
+  --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.9);
 
   --bg-grad-1: rgba(248, 191, 64, 0.16);
   --bg-grad-2: rgba(148, 163, 184, 0.12);
 }
 
-/* ───────────────────────────────────────────
-   Tailwind v4 token bridge (required for bg-background etc.)
-   ─────────────────────────────────────────── */
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--fg);
@@ -145,11 +117,9 @@
   --color-border: var(--border);
   --color-card: var(--card);
 
-  /* Primary + foreground */
   --color-primary: var(--primary-ui);
   --color-primary-foreground: var(--on-primary);
 
-  /* Semantic */
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -160,24 +130,23 @@
   --radius: var(--radius-sm);
 }
 
-/* ───────────────────────────────────────────────────────────
-   BASE
-   ─────────────────────────────────────────────────────────── */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   height: 100%;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
+  min-height: 100%;
   margin: 0;
-  background:
-    radial-gradient(circle at top left, var(--bg-grad-1), transparent 60%),
+  overflow-x: clip;
+  background: radial-gradient(circle at top left, var(--bg-grad-1), transparent 60%),
     radial-gradient(circle at bottom right, var(--bg-grad-2), transparent 60%),
     var(--bg);
   color: var(--fg);
@@ -187,11 +156,18 @@ body {
   accent-color: var(--ring);
 }
 
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--primary-300), transparent 55%);
 }
 
-/* scrollbars */
 body::-webkit-scrollbar {
   width: 8px;
 }
@@ -214,14 +190,12 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Focus: stronger and consistent */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: calc(var(--radius-xs) + 2px);
 }
 
-/* shell */
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -234,15 +208,22 @@ a:hover {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 1.25rem 1.75rem 1.75rem;
   gap: 1.25rem;
+  padding: 1rem;
 }
 
-/* ───────────────────────────────────────────────────────────
-   PRIMITIVES
-   ─────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  .app-main {
+    padding: 1.25rem 1.25rem 1.75rem;
+  }
+}
 
-/* cards */
+@media (min-width: 1024px) {
+  .app-main {
+    padding: 1.25rem 1.75rem 1.75rem;
+  }
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -256,7 +237,6 @@ a:hover {
   box-shadow: var(--shadow-md);
 }
 
-/* section helper */
 .section {
   background: var(--card);
   border: 1px solid var(--border);
@@ -265,7 +245,6 @@ a:hover {
   box-shadow: var(--shadow-sm);
 }
 
-/* buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -280,11 +259,8 @@ a:hover {
   font-size: 0.875rem;
   font-weight: 700;
   box-shadow: var(--shadow-sm);
-  transition:
-    transform 80ms ease-out,
-    box-shadow 120ms ease-out,
-    background-color 140ms ease-out,
-    border-color 140ms ease-out;
+  transition: transform 80ms ease-out, box-shadow 120ms ease-out,
+    background-color 140ms ease-out, border-color 140ms ease-out;
 }
 
 .btn:hover {
@@ -325,7 +301,6 @@ a:hover {
   padding: 0;
 }
 
-/* inputs */
 :where(input, select, textarea) {
   background: var(--input-bg);
   color: var(--fg);
@@ -354,7 +329,6 @@ a:hover {
   outline-offset: 2px;
 }
 
-/* field helpers */
 .field {
   display: flex;
   flex-direction: column;
@@ -367,7 +341,6 @@ a:hover {
   color: var(--muted);
 }
 
-/* badges */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -409,7 +382,6 @@ a:hover {
   border-color: color-mix(in oklab, var(--info), black 55%);
 }
 
-/* tables */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -439,7 +411,6 @@ a:hover {
   background: var(--row-hover);
 }
 
-/* misc helpers */
 .hr {
   height: 1px;
   background: var(--border);
@@ -451,25 +422,10 @@ a:hover {
   border-radius: var(--radius-md);
 }
 
-/* header & sidebar */
-header {
-  background: var(--chrome-bg);
-  border-bottom: 1px solid var(--chrome-border);
-  backdrop-filter: blur(12px);
-}
-
-aside {
-  background: color-mix(in oklab, var(--chrome-bg), var(--bg) 35%);
-  border-right: 1px solid var(--chrome-border);
-  backdrop-filter: blur(14px);
-}
-
-/* ─────────────────────────────────────────
-   INVOICE LAYOUT (SCREEN)
-   ───────────────────────────────────────── */
 .invoice-shell {
   background: #f3f4f6;
 }
+
 .invoice-print {
   margin: 0 auto;
   background: #ffffff;
@@ -478,15 +434,22 @@ aside {
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
 }
+
 @media (min-width: 1024px) {
   .invoice-print {
     max-width: 210mm;
   }
 }
 
-/* ─────────────────────────────────────────
-   PRINT RULES
-   ───────────────────────────────────────── */
+.full-bleed {
+  width: 100vw;
+  width: 100dvw;
+  margin-left: calc(50% - 50vw);
+  margin-left: calc(50% - 50dvw);
+  margin-right: calc(50% - 50vw);
+  margin-right: calc(50% - 50dvw);
+}
+
 @media print {
   @page {
     size: A4;
@@ -512,8 +475,6 @@ aside {
     background-color: #ffffff !important;
   }
 
-  .app-shell > aside,
-  .app-shell > header,
   .no-print {
     display: none !important;
   }
@@ -536,4 +497,21 @@ aside {
     width: 100% !important;
     padding: 0 !important;
   }
+
+  .full-bleed {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .invoice-scale {
+    --scale: 1 !important;
+  }
+  
 }
+
+.app-main > div:has(.invoice-shell) {
+  max-width: none !important;
+  width: 100% !important;
+}
+

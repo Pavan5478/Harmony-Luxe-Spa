@@ -60,7 +60,7 @@ export default function BillingPage() {
     new Date().toISOString().slice(0, 10),
   );
 
-  const [cashierEmail, setCashierEmail] = useState("cashier@example.com");
+  const [cashierEmail, setCashierEmail] = useState("cashier@harmoneyluxe.com");
 
   // track original status when editing (DRAFT / FINAL / VOID)
   const [initialStatus, setInitialStatus] = useState<

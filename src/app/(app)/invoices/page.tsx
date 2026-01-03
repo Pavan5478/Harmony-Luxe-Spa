@@ -1,5 +1,4 @@
-﻿// src/app/(app)/invoices/page.tsx
-import Link from "next/link";
+﻿import Link from "next/link";
 import { inr } from "@/lib/format";
 import { getSession } from "@/lib/session";
 import DeleteButton from "@/components/invoice/DeleteButton";
@@ -32,13 +31,15 @@ function parseISO(d?: string) {
   return Number.isFinite(t) ? t : NaN;
 }
 
-function statusBadge(s: RowStatus) {
+function StatusBadge({ s }: { s: RowStatus }) {
   const base =
     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium";
 
   if (s === "FINAL") {
     return (
-      <span className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}>
+      <span
+        className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         Final
       </span>
@@ -52,9 +53,10 @@ function statusBadge(s: RowStatus) {
       </span>
     );
   }
-
   return (
-    <span className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}>
+    <span
+      className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}
+    >
       <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
       Draft
     </span>
@@ -79,7 +81,6 @@ export default async function InvoicesListPage({
   const canExport = role === "ADMIN" || role === "ACCOUNTS";
   const canEdit = role !== "ACCOUNTS";
 
-  // ✅ FAST: read only A..W (skip RawJson X)
   const rowsRaw = await readRows("Invoices!A2:W");
 
   const rows: Row[] = rowsRaw
@@ -119,9 +120,6 @@ export default async function InvoicesListPage({
     })
     .sort((a, b) => b.ts - a.ts);
 
-  const totalAmount = filtered.reduce((s, r) => s + r.amount, 0);
-  const finalCount = filtered.filter((r) => r.status === "FINAL").length;
-
   const exportHref = `/api/reports/export?${[
     sp.from ? `from=${encodeURIComponent(sp.from)}` : "",
     sp.to ? `to=${encodeURIComponent(sp.to)}` : "",
@@ -129,210 +127,205 @@ export default async function InvoicesListPage({
     .filter(Boolean)
     .join("&")}`;
 
+  const dtDate = new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const dtTime = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
-    <div className="space-y-5 lg:space-y-6">
-      <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-              Invoices
-            </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-              Invoice history
-            </h1>
-            <p className="mt-1 text-xs text-muted sm:text-sm">
-              Search, filter and export all bills. Click any row to open the full invoice view.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <div className="flex flex-wrap justify-end gap-2 text-[11px] text-muted sm:text-xs">
-              <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5">
-                Total <span className="ml-1 font-semibold text-foreground">{filtered.length}</span>
-              </span>
-              <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5">
-                Final <span className="ml-1 font-semibold text-foreground">{finalCount}</span>
-              </span>
-              <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5">
-                Filtered total <span className="ml-1 font-semibold text-foreground">{inr(totalAmount)}</span>
-              </span>
-            </div>
-            <Link
-              href="/billing"
-              className="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-            >
-              + New bill
-            </Link>
-          </div>
-        </div>
-      </section>
-
+    <div className="space-y-3 lg:space-y-4">
+      {/* Compact toolbar */}
       <form
-        className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-4"
+        className="rounded-2xl border border-border bg-card px-3 py-3 shadow-sm sm:px-4"
         action="/invoices"
         method="GET"
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="md:flex-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">
-              Search{" "}
-              <span className="font-normal normal-case text-[11px] text-muted">
-                (bill no / customer / cashier)
-              </span>
-            </label>
-            <input
-              name="q"
-              defaultValue={sp.q || ""}
-              className="mt-1 w-full rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              placeholder="Type to search invoices…"
-            />
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          {/* Left: search */}
+          <div className="flex flex-1 items-center gap-2">
+            <div className="relative w-full">
+              <input
+                name="q"
+                defaultValue={sp.q || ""}
+                className="w-full rounded-full border border-border bg-background px-4 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                placeholder="Search bill no / customer / cashier…"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="hidden shrink-0 items-center justify-center rounded-full border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-card lg:inline-flex"
+            >
+              Search
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-3 md:justify-end">
-            <div className="w-full min-w-[150px] md:w-auto">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">From</label>
-              <input
-                name="from"
-                type="date"
-                defaultValue={sp.from || ""}
-                className="mt-1 w-full rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
-            </div>
+          {/* Right: filters + actions */}
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <input
+              name="from"
+              type="date"
+              defaultValue={sp.from || ""}
+              className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <input
+              name="to"
+              type="date"
+              defaultValue={sp.to || ""}
+              className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
 
-            <div className="w-full min-w-[150px] md:w-auto">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">To</label>
-              <input
-                name="to"
-                type="date"
-                defaultValue={sp.to || ""}
-                className="mt-1 w-full rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
-            </div>
+            <select
+              name="status"
+              defaultValue={status}
+              className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <option value="ALL">All</option>
+              <option value="FINAL">Final</option>
+              <option value="DRAFT">Draft</option>
+              <option value="VOID">Void</option>
+            </select>
 
-            <div className="w-full min-w-[140px] md:w-auto">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Status</label>
-              <select
-                name="status"
-                defaultValue={status}
-                className="mt-1 w-full rounded-full border border-border bg-background px-3.5 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            <button
+              type="submit"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-card"
+            >
+              Apply
+            </button>
+
+            {canExport && (
+              <a
+                href={exportHref}
+                className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-card"
               >
-                <option value="ALL">All</option>
-                <option value="FINAL">Final</option>
-                <option value="DRAFT">Draft</option>
-                <option value="VOID">Void</option>
-              </select>
-            </div>
+                Export
+              </a>
+            )}
 
-            <div className="flex w-full items-end gap-2 md:w-auto md:justify-end">
-              <button
-                className="inline-flex flex-1 items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-card md:flex-none"
-                type="submit"
-              >
-                Apply filters
-              </button>
-              {canExport && (
-                <a
-                  className="inline-flex flex-1 items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-card md:flex-none"
-                  href={exportHref}
-                >
-                  Export CSV
-                </a>
-              )}
-            </div>
+           <Link
+  href="/billing"
+  prefetch={false}
+  className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+>
+  + New bill
+</Link>
+
+          </div>
+        </div>
+
+        {/* Tiny meta row */}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
+          <div>
+            Showing{" "}
+            <span className="font-semibold text-foreground">{filtered.length}</span>{" "}
+            invoices
+          </div>
+          <div className="hidden sm:block">
+            Tip: Press <span className="font-semibold text-foreground">Enter</span>{" "}
+            to search.
           </div>
         </div>
       </form>
 
-      <section className="rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
+      {/* List */}
+      <section>
         {filtered.length === 0 ? (
           <div className="rounded-xl bg-background/70 p-4 text-center text-xs text-muted sm:text-sm">
-            No invoices match your filters yet.
+            No invoices match your filters.
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
             <div className="divide-y divide-border/40">
-              {filtered.map((r, idx) => {
+              {filtered.map((r) => {
                 const dateObj = new Date(r.dateISO);
                 const isValid = !Number.isNaN(dateObj.getTime());
-                const dateStr = isValid
-                  ? dateObj.toLocaleDateString(undefined, {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "—";
-                const timeStr = isValid
-                  ? dateObj.toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "";
+                const dateStr = isValid ? dtDate.format(dateObj) : "—";
+                const timeStr = isValid ? dtTime.format(dateObj) : "";
 
                 const label = r.billNo || r.id || r.key;
-                const serial = idx + 1;
+                const viewHref = `/invoices/${encodeURIComponent(r.key)}`;
+                const printHref = `/invoices/${encodeURIComponent(r.key)}?print=1`;
 
                 return (
                   <div
                     key={r.key}
-                    className="group flex flex-col gap-3 px-3.5 py-3 text-xs transition hover:bg-card/90 sm:flex-row sm:items-center sm:justify-between sm:px-4"
+                    className="px-3 py-2.5 transition hover:bg-card/90 sm:px-4"
                   >
-                    <div className="flex flex-1 items-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-                        {serial}
-                      </div>
-                      <div className="space-y-1">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      {/* Left */}
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <Link
-                            className="text-sm font-semibold text-foreground hover:text-primary hover:no-underline"
-                            href={`/invoices/${encodeURIComponent(r.key)}`}
+                            href={viewHref}
+                            prefetch={false}
+                            className="truncate text-sm font-semibold text-foreground hover:text-primary hover:no-underline"
+                            title={label}
                           >
                             {label}
                           </Link>
-                          {statusBadge(r.status)}
+                          <StatusBadge s={r.status} />
                         </div>
-                        <div className="text-[11px] text-muted">{r.customer || "Walk-in customer"}</div>
-                        <div className="flex flex-wrap gap-2 text-[10px] text-muted">
-                          <span>{dateStr}</span>
-                          {timeStr && (
+
+                        <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-muted">
+                          <span className="truncate">
+                            {r.customer || "Walk-in customer"}
+                          </span>
+                          <span className="hidden sm:inline">•</span>
+                          <span>
+                            {dateStr}
+                            {timeStr ? `, ${timeStr}` : ""}
+                          </span>
+                          {r.cashier ? (
                             <>
                               <span className="hidden sm:inline">•</span>
-                              <span>{timeStr}</span>
+                              <span className="truncate">Cashier: {r.cashier}</span>
                             </>
-                          )}
-                          {r.cashier && (
-                            <>
-                              <span className="hidden sm:inline">•</span>
-                              <span>Cashier: {r.cashier}</span>
-                            </>
-                          )}
+                          ) : null}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex flex-col items-end gap-2 sm:min-w-[230px]">
-                      <div className="text-right text-sm font-semibold text-foreground">{inr(r.amount)}</div>
-                      <div className="flex flex-wrap justify-end gap-1 text-[11px]">
-                        <Link
-                          className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                          href={`/invoices/${encodeURIComponent(r.key)}`}
-                        >
-                          View
-                        </Link>
-                        <Link
-                          className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                          href={`/invoices/${encodeURIComponent(r.key)}?print=1`}
-                        >
-                          Print
-                        </Link>
-                        {canEdit && r.status === "DRAFT" && (
+                      {/* Right */}
+                      <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
+                        <div className="text-sm font-semibold text-foreground">
+                          {inr(r.amount)}
+                        </div>
+
+                        <div className="flex flex-wrap justify-end gap-1 text-[11px]">
                           <Link
+                            href={viewHref}
+                            prefetch={false}
                             className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                            href={`/billing?edit=${encodeURIComponent(r.key)}`}
                           >
-                            Edit draft
+                            View
                           </Link>
-                        )}
-                        {isAdmin && <DeleteButton idOrNo={r.key} />}
+
+                          <Link
+                            href={printHref}
+                            prefetch={false}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
+                          >
+                            Print
+                          </Link>
+
+                          {canEdit && r.status === "DRAFT" && (
+                            <Link
+                              href={`/billing?edit=${encodeURIComponent(r.key)}`}
+                              prefetch={false}
+                              className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
+                            >
+                              Edit
+                            </Link>
+                          )}
+
+                          {isAdmin && <DeleteButton idOrNo={r.key} />}
+                        </div>
                       </div>
                     </div>
                   </div>

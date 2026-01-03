@@ -102,7 +102,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 
   // 2) finalize draft -> FINAL
   const cashierEmail: string =
-    body?.cashierEmail || session.user.email || "unknown@example.com";
+    body?.cashierEmail || session.user.email || "unknown@harmoneyluxe.com";
 
   try {
     const fin = await finalizeDraft(idOrNo, cashierEmail);

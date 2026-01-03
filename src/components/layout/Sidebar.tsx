@@ -1,5 +1,4 @@
-﻿﻿// src/components/layout/Sidebar.tsx
-"use client";
+﻿﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -128,7 +127,6 @@ function buildLinks(role: Role): LinkItem[] {
     ];
   }
 
-  // CASHIER / unknown
   return [
     { href: "/dashboard", label: "Dashboard", icon: ICONS.dashboard },
     { href: "/billing", label: "Billing", icon: ICONS.billing },
@@ -162,11 +160,11 @@ export default function Sidebar() {
   const links = useMemo(() => buildLinks(role), [role]);
 
   return (
-    <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card/95 shadow-sm backdrop-blur lg:flex">
-      {/* Brand */}
+    <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col overflow-x-hidden border-r border-border bg-card/95 shadow-sm backdrop-blur lg:flex">
       <div className="flex h-16 items-center gap-3 border-b border-border px-4">
         <Link
           href="/dashboard"
+          prefetch={false}
           className="flex min-w-0 items-center gap-3"
           aria-label="Go to Dashboard"
         >
@@ -178,15 +176,12 @@ export default function Sidebar() {
             <span className="truncate text-sm font-semibold text-foreground">
               Harmony Luxe
             </span>
-            <span className="truncate text-[11px] text-muted">
-              Billing &amp; reports
-            </span>
+            <span className="truncate text-[11px] text-muted">Billing &amp; reports</span>
           </div>
         </Link>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-2 py-3">
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
         <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
           Workspace
         </div>
@@ -199,6 +194,7 @@ export default function Sidebar() {
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={false}
                 aria-current={active ? "page" : undefined}
                 className={[
                   "group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition",
@@ -233,7 +229,6 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* User footer */}
       <div className="border-t border-border bg-card/95 p-3">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-extrabold uppercase text-primary-foreground shadow">
@@ -241,12 +236,8 @@ export default function Sidebar() {
           </div>
 
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">
-              {email || "—"}
-            </div>
-            <div className="text-[11px] font-semibold text-muted">
-              {role || "—"}
-            </div>
+            <div className="truncate text-sm font-semibold text-foreground">{email || "—"}</div>
+            <div className="text-[11px] font-semibold text-muted">{role || "—"}</div>
           </div>
         </div>
       </div>

@@ -13,19 +13,19 @@ const USER_PRESETS = [
   {
     id: "ADMIN",
     label: "Admin",
-    email: "admin@example.com",
+    email: "admin@harmonyluxe.com",
     description: "Full access to all settings, menu, and reports.",
   },
   {
     id: "CASHIER",
     label: "Cashier",
-    email: "cashier@example.com",
+    email: "cashier@harmonyluxe.com",
     description: "Front desk billing & orders only.",
   },
   {
     id: "ACCOUNTS",
     label: "Accounts",
-    email: "accounts@example.com",
+    email: "accounts@harmonyluxe.com",
     description: "Finance & reports – no menu edits.",
   },
 ] as const;
@@ -36,7 +36,7 @@ export default function LoginPage() {
   const [stage, setStage] = useState<"login" | "first">("login");
 
   const [selectedUser, setSelectedUser] = useState<PresetId>("CASHIER");
-  const [email, setEmail] = useState("cashier@example.com");
+  const [email, setEmail] = useState("cashier@harmoneyluxe.com");
 
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
