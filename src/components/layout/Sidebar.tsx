@@ -96,6 +96,23 @@ const ICONS = {
       />
     </svg>
   ),
+  customers: (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+    </svg>
+  ),
 } as const;
 
 function isActivePath(pathname: string, href: string) {
@@ -111,6 +128,7 @@ function buildLinks(role: Role): LinkItem[] {
       { href: "/menu", label: "Menu", icon: ICONS.menu },
       { href: "/billing", label: "Billing", icon: ICONS.billing },
       { href: "/invoices", label: "Invoices", icon: ICONS.invoices },
+      { href: "/customers", label: "Customers", icon: ICONS.customers },
       { href: "/expenses", label: "Expenses", icon: ICONS.expenses },
       { href: "/reports", label: "Reports", icon: ICONS.reports },
       { href: "/settings", label: "Settings", icon: ICONS.settings },
@@ -121,6 +139,7 @@ function buildLinks(role: Role): LinkItem[] {
     return [
       { href: "/dashboard", label: "Dashboard", icon: ICONS.dashboard },
       { href: "/invoices", label: "Invoices", icon: ICONS.invoices },
+      { href: "/customers", label: "Customers", icon: ICONS.customers },
       { href: "/expenses", label: "Expenses", icon: ICONS.expenses },
       { href: "/reports", label: "Reports", icon: ICONS.reports },
       { href: "/settings", label: "Settings", icon: ICONS.settings },
@@ -131,6 +150,7 @@ function buildLinks(role: Role): LinkItem[] {
     { href: "/dashboard", label: "Dashboard", icon: ICONS.dashboard },
     { href: "/billing", label: "Billing", icon: ICONS.billing },
     { href: "/invoices", label: "Invoices", icon: ICONS.invoices },
+    { href: "/customers", label: "Customers", icon: ICONS.customers },
     { href: "/settings", label: "Settings", icon: ICONS.settings },
   ];
 }

@@ -72,7 +72,7 @@ export default function BillingPage() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch("/api/items", { cache: "no-store" });
+        const r = await fetch("/api/items?all=1", { cache: "no-store" });
         if (!r.ok) throw new Error(await r.text());
         const j = await r.json();
         if (!cancelled) setItems(j.items || []);
@@ -337,10 +337,6 @@ export default function BillingPage() {
                 <h2 className="text-sm font-semibold text-foreground sm:text-base">
                   Items
                 </h2>
-                <p className="mt-1 text-[11px] text-muted sm:text-xs">
-  Type to search items (/ or Ctrl/⌘K). Use ↑/↓ + Enter. Adjust qty in the table.
-</p>
-
               </div>
               <div className="text-[11px] text-muted">
                 Subtotal:{" "}

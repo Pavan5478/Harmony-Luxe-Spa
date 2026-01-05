@@ -42,14 +42,14 @@ export default async function InvoicePage(props: PageProps) {
       ? `/billing?edit=${encodeURIComponent(sp.edit)}`
       : "/invoices";
 
-  const spaName = "Harmony Luxe";
+  const spaName = "Harmony luxe therapy center";
   const spaAddress = [
-    "123, Sample Street",
-    "Some Area, City - 600001",
-    "GSTIN: 33AAAAA0000A1Z5",
+    "9th A Manin Road, Binnamangala, Hoysalanagar,",
+    "1st Stage, Indiranagar, bengalore, Karnataka. 560038",
+    "GSTIN: 29AARFH8480L1ZD",
   ];
-  const spaPhone = "+91 98765 43210";
-  const spaEmail = "info@spa.com";
+  const spaPhone = "+91-90711 11599";
+  const spaEmail = "harmonyluxetherapy@gmail.com";
 
   const billNoLabel = String(bill.billNo || bill.id || key || "—");
   const billDateLabel = billDate.toLocaleDateString();
