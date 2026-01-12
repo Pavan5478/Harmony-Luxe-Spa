@@ -1,4 +1,5 @@
-﻿﻿"use client";
+﻿﻿// src/components/layout/Topbar.tsx
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -54,12 +55,25 @@ export default function Topbar() {
   }
 
   const roleLabel =
-    role === "ADMIN" ? "Admin" : role === "CASHIER" ? "Cashier" : role === "ACCOUNTS" ? "Accounts" : "Staff";
+    role === "ADMIN"
+      ? "Admin"
+      : role === "CASHIER"
+        ? "Cashier"
+        : role === "ACCOUNTS"
+          ? "Accounts"
+          : "Staff";
 
   return (
     <header className="no-print sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl min-w-0 items-center justify-between px-3 sm:h-16 sm:px-4 lg:px-6">
-        <Link href="/dashboard" prefetch={false} className="flex min-w-0 items-center gap-2">
+      {/* On desktop (lg+): hide brand completely + keep actions aligned right */}
+      <div className="mx-auto flex h-14 max-w-6xl min-w-0 items-center justify-between px-3 sm:h-16 sm:px-4 lg:justify-end lg:px-6">
+        {/* Brand: MOBILE ONLY */}
+        <Link
+          href="/dashboard"
+          prefetch={false}
+          className="flex min-w-0 items-center gap-2 lg:hidden"
+          aria-label="Go to Dashboard"
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs text-primary shadow-sm">
             XS
           </div>
@@ -97,7 +111,9 @@ export default function Topbar() {
           </button>
 
           <div className="hidden min-w-0 flex-col items-end leading-tight sm:flex">
-            <span className="max-w-[220px] truncate text-xs font-medium text-foreground">{email || "—"}</span>
+            <span className="max-w-[220px] truncate text-xs font-medium text-foreground">
+              {email || "—"}
+            </span>
             <span className="text-[10px] text-muted">{roleLabel}</span>
           </div>
 

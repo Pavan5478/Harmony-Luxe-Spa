@@ -3,6 +3,7 @@ import { inr } from "@/lib/format";
 import { getSession } from "@/lib/session";
 import DeleteButton from "@/components/invoice/DeleteButton";
 import { readRows } from "@/lib/sheets";
+import InvoicesFiltersBar from "@/components/invoice/InvoicesFiltersBar";
 
 type SP = {
   q?: string;
@@ -32,14 +33,10 @@ function parseISO(d?: string) {
 }
 
 function StatusBadge({ s }: { s: RowStatus }) {
-  const base =
-    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium";
-
+  const base = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium";
   if (s === "FINAL") {
     return (
-      <span
-        className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}
-      >
+      <span className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}>
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         Final
       </span>
@@ -54,9 +51,7 @@ function StatusBadge({ s }: { s: RowStatus }) {
     );
   }
   return (
-    <span
-      className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}
-    >
+    <span className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}>
       <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
       Draft
     </span>
@@ -72,8 +67,7 @@ export default async function InvoicesListPage({
   const q = (sp.q || "").trim().toLowerCase();
   const status = (sp.status || "ALL") as SP["status"];
   const fromTs = parseISO(sp.from) || Number.NEGATIVE_INFINITY;
-  const toTs =
-    (parseISO(sp.to) || Number.POSITIVE_INFINITY) + 24 * 3600 * 1000;
+  const toTs = (parseISO(sp.to) || Number.POSITIVE_INFINITY) + 24 * 3600 * 1000;
 
   const session = await getSession();
   const role = session.user?.role;
@@ -120,13 +114,6 @@ export default async function InvoicesListPage({
     })
     .sort((a, b) => b.ts - a.ts);
 
-  const exportHref = `/api/reports/export?${[
-    sp.from ? `from=${encodeURIComponent(sp.from)}` : "",
-    sp.to ? `to=${encodeURIComponent(sp.to)}` : "",
-  ]
-    .filter(Boolean)
-    .join("&")}`;
-
   const dtDate = new Intl.DateTimeFormat(undefined, {
     day: "2-digit",
     month: "short",
@@ -138,108 +125,24 @@ export default async function InvoicesListPage({
   });
 
   return (
-    <div className="space-y-3 lg:space-y-4">
-      {/* Compact toolbar */}
-      <form
-        className="rounded-2xl border border-border bg-card px-3 py-3 shadow-sm sm:px-4"
-        action="/invoices"
-        method="GET"
-      >
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          {/* Left: search */}
-          <div className="flex flex-1 items-center gap-2">
-            <div className="relative w-full">
-              <input
-                name="q"
-                defaultValue={sp.q || ""}
-                className="w-full rounded-full border border-border bg-background px-4 py-2.5 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                placeholder="Search bill no / customer / cashier…"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="hidden shrink-0 items-center justify-center rounded-full border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-card lg:inline-flex"
-            >
-              Search
-            </button>
-          </div>
-
-          {/* Right: filters + actions */}
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <input
-              name="from"
-              type="date"
-              defaultValue={sp.from || ""}
-              className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-            <input
-              name="to"
-              type="date"
-              defaultValue={sp.to || ""}
-              className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-
-            <select
-              name="status"
-              defaultValue={status}
-              className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="ALL">All</option>
-              <option value="FINAL">Final</option>
-              <option value="DRAFT">Draft</option>
-              <option value="VOID">Void</option>
-            </select>
-
-            <button
-              type="submit"
-              className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-card"
-            >
-              Apply
-            </button>
-
-            {canExport && (
-              <a
-                href={exportHref}
-                className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-card"
-              >
-                Export
-              </a>
-            )}
-
-           <Link
-  href="/billing"
-  prefetch={false}
-  className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
->
-  + New bill
-</Link>
-
-          </div>
-        </div>
-
-        {/* Tiny meta row */}
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
-          <div>
-            Showing{" "}
-            <span className="font-semibold text-foreground">{filtered.length}</span>{" "}
-            invoices
-          </div>
-          <div className="hidden sm:block">
-            Tip: Press <span className="font-semibold text-foreground">Enter</span>{" "}
-            to search.
-          </div>
-        </div>
-      </form>
+    <div className="min-w-0 space-y-3 pb-24 lg:space-y-4 lg:pb-0">
+      <InvoicesFiltersBar
+        initialQ={sp.q || ""}
+        initialFrom={sp.from || ""}
+        initialTo={sp.to || ""}
+        initialStatus={(status || "ALL") as any}
+        canExport={canExport}
+        count={filtered.length}
+      />
 
       {/* List */}
-      <section>
+      <section className="min-w-0">
         {filtered.length === 0 ? (
           <div className="rounded-xl bg-background/70 p-4 text-center text-xs text-muted sm:text-sm">
             No invoices match your filters.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
+          <div className="min-w-0 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
             <div className="divide-y divide-border/40">
               {filtered.map((r) => {
                 const dateObj = new Date(r.dateISO);
@@ -252,10 +155,7 @@ export default async function InvoicesListPage({
                 const printHref = `/invoices/${encodeURIComponent(r.key)}?print=1`;
 
                 return (
-                  <div
-                    key={r.key}
-                    className="px-3 py-2.5 transition hover:bg-card/90 sm:px-4"
-                  >
+                  <div key={r.key} className="px-3 py-2.5 transition hover:bg-card/90 sm:px-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       {/* Left */}
                       <div className="min-w-0">
@@ -271,10 +171,9 @@ export default async function InvoicesListPage({
                           <StatusBadge s={r.status} />
                         </div>
 
+                        {/* keep compact: single meta line */}
                         <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-muted">
-                          <span className="truncate">
-                            {r.customer || "Walk-in customer"}
-                          </span>
+                          <span className="truncate">{r.customer || "Walk-in customer"}</span>
                           <span className="hidden sm:inline">•</span>
                           <span>
                             {dateStr}
@@ -291,7 +190,7 @@ export default async function InvoicesListPage({
 
                       {/* Right */}
                       <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
-                        <div className="text-sm font-semibold text-foreground">
+                        <div className="text-sm font-semibold text-foreground tabular-nums">
                           {inr(r.amount)}
                         </div>
 
@@ -314,7 +213,7 @@ export default async function InvoicesListPage({
                             Print
                           </Link>
 
-                          {canEdit && r.status === "DRAFT" && (
+                          {canEdit && r.status === "DRAFT" ? (
                             <Link
                               href={`/billing?edit=${encodeURIComponent(r.key)}`}
                               prefetch={false}
@@ -322,9 +221,9 @@ export default async function InvoicesListPage({
                             >
                               Edit
                             </Link>
-                          )}
+                          ) : null}
 
-                          {isAdmin && <DeleteButton idOrNo={r.key} />}
+                          {isAdmin ? <DeleteButton idOrNo={r.key} /> : null}
                         </div>
                       </div>
                     </div>

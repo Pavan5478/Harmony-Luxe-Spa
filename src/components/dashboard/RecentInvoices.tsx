@@ -60,6 +60,7 @@ function SegButton({
       onClick={onClick}
       className={[
         "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+        "whitespace-nowrap",
         active
           ? "border-primary/40 bg-primary/10 text-primary"
           : "border-border bg-background/60 text-muted hover:bg-background/80",
@@ -67,9 +68,7 @@ function SegButton({
     >
       <span>{label}</span>
       {typeof count === "number" ? (
-        <span className={active ? "text-primary" : "text-muted"}>
-          {count}
-        </span>
+        <span className={active ? "text-primary" : "text-muted"}>{count}</span>
       ) : null}
     </button>
   );
@@ -136,16 +135,14 @@ export default function RecentInvoices() {
   }, [items, filter]);
 
   const visibleItems = useMemo(() => filteredItems.slice(0, limit), [filteredItems, limit]);
-
   const canShowMore = filteredItems.length > limit;
 
-  // Reset limit when filter changes (keeps list compact)
   useEffect(() => {
     setLimit(8);
   }, [filter]);
 
   return (
-    <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
+    <section className="min-w-0 rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-6 sm:py-5">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
@@ -164,7 +161,10 @@ export default function RecentInvoices() {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-full bg-background/80 px-2.5 py-1 text-[11px] text-muted">
-            Total <span className="ml-1 font-medium text-foreground">{inr(stats.total)}</span>
+            Total{" "}
+            <span className="ml-1 font-medium text-foreground tabular-nums">
+              {inr(stats.total)}
+            </span>
           </span>
 
           <Link
@@ -177,37 +177,39 @@ export default function RecentInvoices() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <SegButton
-          active={filter === "ALL"}
-          onClick={() => setFilter("ALL")}
-          label="All"
-          count={stats.count}
-        />
-        <SegButton
-          active={filter === "FINAL"}
-          onClick={() => setFilter("FINAL")}
-          label="Final"
-          count={stats.finalCount}
-        />
-        <SegButton
-          active={filter === "DRAFT"}
-          onClick={() => setFilter("DRAFT")}
-          label="Draft"
-          count={stats.draftCount}
-        />
-        {stats.voidCount > 0 ? (
+      {/* Filters (scrollable on mobile) */}
+      <div className="mt-3">
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <SegButton
-            active={filter === "VOID"}
-            onClick={() => setFilter("VOID")}
-            label="Void"
-            count={stats.voidCount}
+            active={filter === "ALL"}
+            onClick={() => setFilter("ALL")}
+            label="All"
+            count={stats.count}
           />
-        ) : null}
+          <SegButton
+            active={filter === "FINAL"}
+            onClick={() => setFilter("FINAL")}
+            label="Final"
+            count={stats.finalCount}
+          />
+          <SegButton
+            active={filter === "DRAFT"}
+            onClick={() => setFilter("DRAFT")}
+            label="Draft"
+            count={stats.draftCount}
+          />
+          {stats.voidCount > 0 ? (
+            <SegButton
+              active={filter === "VOID"}
+              onClick={() => setFilter("VOID")}
+              label="Void"
+              count={stats.voidCount}
+            />
+          ) : null}
 
-        <div className="ml-auto hidden text-[11px] text-muted sm:block">
-          Tip: drafts can be edited from invoices.
+          <div className="ml-auto hidden text-[11px] text-muted sm:block">
+            Tip: drafts can be edited from invoices.
+          </div>
         </div>
       </div>
 
@@ -235,7 +237,7 @@ export default function RecentInvoices() {
           No invoices found for this filter.
         </div>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
+        <div className="mt-4 min-w-0 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
           {/* Desktop table header */}
           <div className="hidden grid-cols-[44px_minmax(0,1.5fr)_minmax(0,1fr)_200px_140px_28px] items-center gap-3 border-b border-border/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted sm:grid">
             <div>#</div>
@@ -246,7 +248,7 @@ export default function RecentInvoices() {
             <div />
           </div>
 
-          {/* Rows (scroll container keeps dashboard dense) */}
+          {/* Rows */}
           <div className="max-h-[420px] overflow-auto">
             <div className="divide-y divide-border/40">
               {visibleItems.map((it, idx) => {
@@ -271,23 +273,30 @@ export default function RecentInvoices() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
                               {serial}
                             </span>
-                            <span className="truncate text-sm font-semibold text-foreground" title={label}>
+                            <span
+                              className="min-w-0 truncate text-sm font-semibold text-foreground"
+                              title={label}
+                            >
                               {label}
                             </span>
                           </div>
+
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <StatusPill status={st} />
-                            <span className="truncate text-[11px] text-muted" title={it.customer || ""}>
+                            <span
+                              className="min-w-0 truncate text-[11px] text-muted"
+                              title={it.customer || ""}
+                            >
                               {it.customer || "Walk-in guest"}
                             </span>
                           </div>
                         </div>
 
                         <div className="shrink-0 text-right">
-                          <div className="text-sm font-semibold text-foreground">
+                          <div className="text-sm font-semibold text-foreground tabular-nums">
                             {inr(it.grandTotal ?? 0)}
                           </div>
                           <div className="mt-1 text-[10px] text-muted">{dateStr}</div>
@@ -322,7 +331,7 @@ export default function RecentInvoices() {
                       <div className="text-[11px] text-muted">{dateStr}</div>
 
                       <div className="text-right">
-                        <div className="text-sm font-semibold text-foreground">
+                        <div className="text-sm font-semibold text-foreground tabular-nums">
                           {inr(it.grandTotal ?? 0)}
                         </div>
                         {hasLink ? (
@@ -369,14 +378,20 @@ export default function RecentInvoices() {
               })}
             </div>
 
-            {/* Footer actions */}
-            <div className="flex items-center justify-between gap-2 border-t border-border/50 bg-background/30 px-3 py-2">
+            {/* Footer actions (stacks on mobile) */}
+            <div className="flex flex-col gap-2 border-t border-border/50 bg-background/30 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-[11px] text-muted">
-                Showing <span className="font-medium text-foreground">{Math.min(limit, filteredItems.length)}</span> of{" "}
-                <span className="font-medium text-foreground">{filteredItems.length}</span>
+                Showing{" "}
+                <span className="font-medium text-foreground">
+                  {Math.min(limit, filteredItems.length)}
+                </span>{" "}
+                of{" "}
+                <span className="font-medium text-foreground">
+                  {filteredItems.length}
+                </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {canShowMore ? (
                   <button
                     type="button"

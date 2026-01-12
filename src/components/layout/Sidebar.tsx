@@ -1,4 +1,5 @@
-﻿﻿"use client";
+﻿﻿// src/components/layout/Sidebar.tsx
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -115,6 +116,36 @@ const ICONS = {
   ),
 } as const;
 
+function ChevronRight() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M9 18l6-6-6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronLeft() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M15 18l-6-6 6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function isActivePath(pathname: string, href: string) {
   if (!pathname) return false;
   if (href === "/") return pathname === "/";
@@ -155,10 +186,38 @@ function buildLinks(role: Role): LinkItem[] {
   ];
 }
 
+function mobileOrder(role: Role): string[] {
+  // choose what appears first on mobile (top 4 will show in bottom bar)
+  if (role === "ADMIN") {
+    return ["/dashboard", "/billing", "/invoices", "/menu", "/customers", "/expenses", "/reports", "/settings"];
+  }
+  if (role === "ACCOUNTS") {
+    return ["/dashboard", "/invoices", "/expenses", "/reports", "/customers", "/settings"];
+  }
+  // CASHIER
+  return ["/dashboard", "/billing", "/invoices", "/customers", "/settings"];
+}
+
+function orderByHref(links: LinkItem[], hrefOrder: string[]) {
+  const map = new Map(links.map((l) => [l.href, l]));
+  const out: LinkItem[] = [];
+
+  for (const h of hrefOrder) {
+    const item = map.get(h);
+    if (item) out.push(item);
+  }
+  // append anything not listed (safety)
+  for (const l of links) {
+    if (!out.some((x) => x.href === l.href)) out.push(l);
+  }
+  return out;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [role, setRole] = useState<Role>(null);
   const [email, setEmail] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -177,37 +236,123 @@ export default function Sidebar() {
     return () => ac.abort();
   }, []);
 
+  // close drawer on route change
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
+
+  // close on ESC
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMoreOpen(false);
+    }
+    if (moreOpen) window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [moreOpen]);
+
   const links = useMemo(() => buildLinks(role), [role]);
 
+  const orderedMobile = useMemo(() => {
+    return orderByHref(links, mobileOrder(role));
+  }, [links, role]);
+
+  const primary4 = useMemo(() => orderedMobile.slice(0, 4), [orderedMobile]);
+  const overflow = useMemo(() => orderedMobile.slice(4), [orderedMobile]);
+
+  const overflowActive = useMemo(() => {
+    return overflow.some((l) => isActivePath(pathname ?? "", l.href));
+  }, [overflow, pathname]);
+
   return (
-    <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col overflow-x-hidden border-r border-border bg-card/95 shadow-sm backdrop-blur lg:flex">
-      <div className="flex h-16 items-center gap-3 border-b border-border px-4">
-        <Link
-          href="/dashboard"
-          prefetch={false}
-          className="flex min-w-0 items-center gap-3"
-          aria-label="Go to Dashboard"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background shadow ring-1 ring-primary/20">
-            <span className="text-xs font-semibold text-primary">XS</span>
-          </div>
+    <>
+      {/* Desktop sidebar (unchanged) */}
+      <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col overflow-x-hidden border-r border-border bg-card/95 shadow-sm backdrop-blur lg:flex">
+        <div className="flex h-16 items-center gap-3 border-b border-border px-4">
+          <Link
+            href="/dashboard"
+            prefetch={false}
+            className="flex min-w-0 items-center gap-3"
+            aria-label="Go to Dashboard"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background shadow ring-1 ring-primary/20">
+              <span className="text-xs font-semibold text-primary">XS</span>
+            </div>
 
-          <div className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-semibold text-foreground">
-              Harmony Luxe
-            </span>
-            <span className="truncate text-[11px] text-muted">Billing &amp; reports</span>
-          </div>
-        </Link>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
-        <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
-          Workspace
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-sm font-semibold text-foreground">
+                Harmony Luxe
+              </span>
+              <span className="truncate text-[11px] text-muted">Billing &amp; reports</span>
+            </div>
+          </Link>
         </div>
 
-        <div className="space-y-1">
-          {links.map((link) => {
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
+          <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Workspace
+          </div>
+
+          <div className="space-y-1">
+            {links.map((link) => {
+              const active = isActivePath(pathname ?? "", link.href);
+
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  prefetch={false}
+                  aria-current={active ? "page" : undefined}
+                  className={[
+                    "group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition",
+                    active
+                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                      : "text-muted hover:bg-background hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <span
+                    className={[
+                      "flex h-8 w-8 items-center justify-center rounded-xl ring-1 transition",
+                      active
+                        ? "bg-primary/10 text-primary ring-primary/20"
+                        : "bg-background text-foreground/80 ring-border group-hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {link.icon}
+                  </span>
+
+                  <span className="truncate">{link.label}</span>
+
+                  <span
+                    className={[
+                      "ml-auto h-1.5 w-1.5 rounded-full transition",
+                      active ? "bg-primary" : "bg-transparent group-hover:bg-border",
+                    ].join(" ")}
+                    aria-hidden
+                  />
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+
+        <div className="border-t border-border bg-card/95 p-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-extrabold uppercase text-primary-foreground shadow">
+              {(email || "U").charAt(0).toUpperCase()}
+            </div>
+
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-foreground">{email || "—"}</div>
+              <div className="text-[11px] font-semibold text-muted">{role || "—"}</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile: bottom bar (4 items + 5th "More") */}
+      <nav className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur lg:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2">
+          {primary4.map((link) => {
             const active = isActivePath(pathname ?? "", link.href);
 
             return (
@@ -217,50 +362,166 @@ export default function Sidebar() {
                 prefetch={false}
                 aria-current={active ? "page" : undefined}
                 className={[
-                  "group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition",
-                  active
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                    : "text-muted hover:bg-background hover:text-foreground",
+                  "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 transition",
+                  active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground",
                 ].join(" ")}
               >
                 <span
                   className={[
-                    "flex h-8 w-8 items-center justify-center rounded-xl ring-1 transition",
+                    "flex h-10 w-10 items-center justify-center rounded-2xl ring-1 transition",
                     active
-                      ? "bg-primary/10 text-primary ring-primary/20"
-                      : "bg-background text-foreground/80 ring-border group-hover:text-foreground",
+                      ? "bg-primary/10 text-primary ring-primary/25"
+                      : "bg-background text-foreground/80 ring-border",
                   ].join(" ")}
+                  aria-hidden
                 >
                   {link.icon}
                 </span>
-
-                <span className="truncate">{link.label}</span>
-
-                <span
-                  className={[
-                    "ml-auto h-1.5 w-1.5 rounded-full transition",
-                    active ? "bg-primary" : "bg-transparent group-hover:bg-border",
-                  ].join(" ")}
-                  aria-hidden
-                />
+                <span className="max-w-[72px] truncate text-[10px] font-semibold leading-none">
+                  {link.label}
+                </span>
               </Link>
             );
           })}
+
+          {/* 5th button: opens the remaining items */}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+            className={[
+              "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 transition",
+              moreOpen || overflowActive
+                ? "bg-primary/10 text-primary"
+                : "text-muted hover:text-foreground",
+            ].join(" ")}
+          >
+            <span
+              className={[
+                "flex h-10 w-10 items-center justify-center rounded-2xl ring-1 transition",
+                moreOpen || overflowActive
+                  ? "bg-primary/10 text-primary ring-primary/25"
+                  : "bg-background text-foreground/80 ring-border",
+              ].join(" ")}
+              aria-hidden
+            >
+              <ChevronRight />
+            </span>
+            <span className="max-w-[72px] truncate text-[10px] font-semibold leading-none">
+              More
+            </span>
+          </button>
         </div>
+
+        <div className="h-[env(safe-area-inset-bottom)]" />
       </nav>
 
-      <div className="border-t border-border bg-card/95 p-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-extrabold uppercase text-primary-foreground shadow">
-            {(email || "U").charAt(0).toUpperCase()}
-          </div>
+      {/* Mobile drawer for remaining items */}
+      {moreOpen ? (
+        <div
+          className="fixed inset-0 z-50 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="More menu"
+        >
+          {/* Backdrop */}
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/35"
+            aria-label="Close menu"
+            onClick={() => setMoreOpen(false)}
+          />
 
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">{email || "—"}</div>
-            <div className="text-[11px] font-semibold text-muted">{role || "—"}</div>
+          {/* Drawer (left) */}
+          <div className="absolute inset-y-0 left-0 w-[86%] max-w-xs overflow-hidden border-r border-border bg-card shadow-card">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                  Menu
+                </div>
+                <div className="truncate text-sm font-semibold text-foreground">
+                  More options
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMoreOpen(false)}
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground"
+              >
+                <span aria-hidden>
+                  <ChevronLeft />
+                </span>
+                Back
+              </button>
+            </div>
+
+            {/* Items (icons left, text right) */}
+            <nav className="p-2">
+              <div className="space-y-1">
+                {overflow.map((link) => {
+                  const active = isActivePath(pathname ?? "", link.href);
+
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      prefetch={false}
+                      aria-current={active ? "page" : undefined}
+                      className={[
+                        "flex items-center gap-3 rounded-2xl px-3 py-2.5 transition",
+                        active
+                          ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                          : "text-muted hover:bg-background hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "flex h-10 w-10 items-center justify-center rounded-2xl ring-1 transition",
+                          active
+                            ? "bg-primary/10 text-primary ring-primary/25"
+                            : "bg-background text-foreground/80 ring-border",
+                        ].join(" ")}
+                        aria-hidden
+                      >
+                        {link.icon}
+                      </span>
+
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {link.label}
+                      </span>
+
+                      <span
+                        className={[
+                          "h-1.5 w-1.5 rounded-full transition",
+                          active ? "bg-primary" : "bg-border",
+                        ].join(" ")}
+                        aria-hidden
+                      />
+                    </Link>
+                  );
+                })}
+
+                {/* If no overflow, still show a friendly item */}
+                {overflow.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border bg-background px-3 py-4 text-center text-xs text-muted">
+                    No more items
+                  </div>
+                ) : null}
+              </div>
+            </nav>
+
+            {/* Small footer (optional) */}
+            <div className="border-t border-border px-4 py-3">
+              <div className="truncate text-xs font-semibold text-muted">
+                {email ? `Signed in: ${email}` : " "}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      ) : null}
+    </>
   );
 }

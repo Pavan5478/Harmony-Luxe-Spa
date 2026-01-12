@@ -1,7 +1,7 @@
 // src/components/expenses/ExpensesClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Expense } from "@/types/expenses";
 import { inr } from "@/lib/format";
 import useDebouncedValue from "@/components/expenses/useDebouncedValue";
@@ -65,6 +65,329 @@ function ymd(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+/** ===== Billing-style calendar utils ===== */
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function toYMDLocal(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+function parseYMDLocal(ymdStr: string) {
+  return new Date(`${ymdStr}T00:00:00`);
+}
+function sameYMD(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function CalendarIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M7 3v3M17 3v3M4.5 8.5h15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 12h3M13.5 12h3M7.5 16h3M13.5 16h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M15 18l-6-6 6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function ChevronRightIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M9 18l6-6-6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Compact Billing-style date picker pill (for From/To + modal date) */
+function DatePillPicker({
+  label,
+  value,
+  onChange,
+  allowClear,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  allowClear?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  const selected = useMemo(() => {
+    try {
+      return value ? parseYMDLocal(value) : new Date();
+    } catch {
+      return new Date();
+    }
+  }, [value]);
+
+  const [view, setView] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+
+  useEffect(() => {
+    setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
+  }, [selected]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (popRef.current?.contains(t)) return;
+      if (anchorRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (!open) return;
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const human = useMemo(() => {
+    if (!value) return "";
+    try {
+      const f = new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+      return f.format(selected);
+    } catch {
+      return value;
+    }
+  }, [value, selected]);
+
+  const monthLabel = useMemo(() => {
+    return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(view);
+  }, [view]);
+
+  const today = useMemo(() => new Date(), []);
+
+  const startWeekday = useMemo(() => {
+    const firstDay = new Date(view.getFullYear(), view.getMonth(), 1);
+    return firstDay.getDay();
+  }, [view]);
+
+  const cells = useMemo(() => {
+    const arr: { date: Date; inMonth: boolean }[] = [];
+    const gridStart = new Date(view.getFullYear(), view.getMonth(), 1 - startWeekday);
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart);
+      d.setDate(gridStart.getDate() + i);
+      arr.push({ date: d, inMonth: d.getMonth() === view.getMonth() });
+    }
+    return arr;
+  }, [view, startWeekday]);
+
+  function pick(d: Date) {
+    onChange(toYMDLocal(d));
+    setOpen(false);
+  }
+
+  const pillBase =
+    "inline-flex h-10 items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 text-sm font-medium text-foreground shadow-sm hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
+
+  return (
+    <div className="relative" ref={anchorRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className={pillBase}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background/60">
+          <CalendarIcon className="text-muted" />
+        </span>
+
+        <span className="truncate text-[12px] text-muted">
+          {label}
+          {value ? <span className="text-foreground"> • {human}</span> : null}
+        </span>
+
+        <span className="ml-1 text-[11px] text-muted">▾</span>
+      </button>
+
+      {open ? (
+        <div
+          ref={popRef}
+          role="dialog"
+          aria-label={`Select ${label} date`}
+          className="absolute right-0 top-full z-50 mt-2 w-[340px] max-w-[92vw] overflow-hidden rounded-2xl border border-border bg-card shadow-card"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2 border-b border-border bg-background/40 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-card"
+              aria-label="Previous month"
+            >
+              <ChevronLeftIcon />
+            </button>
+
+            <div className="min-w-0 text-center">
+              <div className="text-sm font-semibold text-foreground">{monthLabel}</div>
+              <div className="text-[11px] text-muted">
+                Selected:{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {value || "—"}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-card"
+              aria-label="Next month"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+
+          {/* Week header */}
+          <div className="grid grid-cols-7 gap-1 px-3 pt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => (
+              <div key={w}>{w}</div>
+            ))}
+          </div>
+
+          {/* Days grid */}
+          <div className="grid grid-cols-7 gap-1 px-3 py-3">
+            {cells.map(({ date, inMonth }, i) => {
+              const isSel = value ? sameYMD(date, selected) : false;
+              const isToday = sameYMD(date, today);
+
+              return (
+                <button
+                  key={`${date.toISOString()}-${i}`}
+                  type="button"
+                  onClick={() => pick(date)}
+                  className={[
+                    "relative inline-flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    inMonth ? "text-foreground" : "text-muted/60",
+                    isSel
+                      ? "bg-primary/15 text-primary ring-1 ring-primary/25"
+                      : "bg-background/50 hover:bg-card",
+                  ].join(" ")}
+                  aria-pressed={isSel}
+                >
+                  <span className="tabular-nums">{date.getDate()}</span>
+                  {isToday && !isSel ? (
+                    <span
+                      className="absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary"
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-background/40 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  setView(new Date(d.getFullYear(), d.getMonth(), 1));
+                  onChange(toYMDLocal(d));
+                  setOpen(false);
+                }}
+                className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-card"
+              >
+                Today
+              </button>
+
+              {allowClear ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange("");
+                    setOpen(false);
+                  }}
+                  className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted hover:bg-card hover:text-foreground"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted hover:bg-card hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Hidden native date input (accessibility) */}
+          <input
+            type="date"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="sr-only"
+            aria-label={`${label} date`}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function labelTiny(text: string) {
   return (
     <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">{text}</span>
@@ -95,7 +418,7 @@ export default function ExpensesClient({ initialExpenses }: Props) {
     return () => ac.abort();
   }, []);
 
-  // MAIN LIST (this becomes "current filtered list")
+  // MAIN LIST
   const [expenses, setExpenses] = useState<Expense[]>(() => sortNewestFirst(initialExpenses));
 
   // Filters
@@ -181,7 +504,7 @@ export default function ExpensesClient({ initialExpenses }: Props) {
     setModalOpen(true);
   }
 
-  // SERVER FETCH (fast + consistent)
+  // SERVER FETCH
   async function fetchFiltered(signal?: AbortSignal) {
     const params = new URLSearchParams();
 
@@ -216,7 +539,7 @@ export default function ExpensesClient({ initialExpenses }: Props) {
     }
   }
 
-  // Auto-refresh list when filters change (debounced search)
+  // Auto-refresh list when filters change
   useEffect(() => {
     const ac = new AbortController();
 
@@ -353,7 +676,6 @@ export default function ExpensesClient({ initialExpenses }: Props) {
 
       setModalOpen(false);
 
-      // Refresh list so it matches filters exactly
       setLoadingList(true);
       setListError(null);
       await fetchFiltered();
@@ -402,244 +724,207 @@ export default function ExpensesClient({ initialExpenses }: Props) {
   const chipBase =
     "inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 px-3 py-1 text-[11px] text-muted backdrop-blur hover:bg-card";
 
-  const fieldBase =
-    "h-10 w-full rounded-full border border-border/70 bg-background/70 px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  const inputBase =
+    "h-10 w-full rounded-full border border-border/70 bg-background/70 px-4 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
   return (
     <>
-      {/* Top bar (responsive + cleaner alignment) */}
-<section className="mb-4 overflow-hidden rounded-2xl border border-border/70 bg-card/70 shadow-sm backdrop-blur">
-  {/* Header */}
-  <div className="px-4 py-4 sm:px-6">
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      {/* Title */}
-      <div className="min-w-0">
-        {labelTiny("Finance")}
+      {/* Top bar */}
+      <section className="mb-4 rounded-2xl border border-border/70 bg-card/70 shadow-sm backdrop-blur">
+        {/* Header */}
+        <div className="px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              {labelTiny("Finance")}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Expenses</h1>
 
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Expenses</h1>
+                {role ? (
+                  <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-border/70 bg-background/60 px-2.5 py-0.5 text-[11px] font-medium text-muted">
+                    <span className="truncate">{role}</span>
+                    {!canWrite ? <span className="text-slate-400">(read-only)</span> : null}
+                  </span>
+                ) : null}
+              </div>
 
-          {role ? (
-            <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-border/70 bg-background/60 px-2.5 py-0.5 text-[11px] font-medium text-muted">
-              <span className="truncate">{role}</span>
-              {!canWrite ? <span className="text-slate-400">(read-only)</span> : null}
-            </span>
-          ) : null}
+              <p className="mt-1 max-w-2xl text-[12px] text-muted">
+                Fast filters + export. Vendor and receipt links are stored in notes (no Sheets
+                changes).
+              </p>
+            </div>
+
+            <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={openNew}
+                disabled={!canWrite}
+                className="inline-flex h-10 w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60 sm:w-auto"
+              >
+                + Add expense
+              </button>
+
+              {canExport && (
+                <a
+                  href={exportHref}
+                  className="inline-flex h-10 w-full items-center justify-center rounded-full border border-border/70 bg-background/70 px-4 text-sm font-semibold text-foreground hover:bg-card sm:w-auto"
+                >
+                  Export CSV
+                </a>
+              )}
+            </div>
+          </div>
         </div>
 
-        <p className="mt-1 max-w-2xl text-[12px] text-muted">
-          Fast filters + export. Vendor and receipt links are stored in notes (no Sheets changes).
-        </p>
-      </div>
+        {/* Filters (single clean row on desktop) */}
+        <div className="border-t border-border/60 bg-background/35 px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            {/* Search */}
+            <div className="min-w-0 flex-1">
+              {labelTiny("Search")}
+              <input
+                placeholder="Description / notes / category"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={`${inputBase} mt-1`}
+              />
+            </div>
 
-      {/* Actions */}
-      <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-        <button
-          type="button"
-          onClick={openNew}
-          disabled={!canWrite}
-          className="inline-flex h-10 w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60 sm:w-auto"
-        >
-          + Add expense
-        </button>
+            {/* Right controls */}
+            <div className="flex flex-wrap items-end gap-2 lg:justify-end">
+              <div className="space-y-1">
+                {labelTiny("From")}
+                <DatePillPicker label="From" value={from} onChange={setFrom} allowClear />
+              </div>
 
-        {canExport && (
-          <a
-            href={exportHref}
-            className="inline-flex h-10 w-full items-center justify-center rounded-full border border-border/70 bg-background/70 px-4 text-sm font-semibold text-foreground hover:bg-card sm:w-auto"
-          >
-            Export CSV
-          </a>
-        )}
-      </div>
-    </div>
-  </div>
+              <div className="space-y-1">
+                {labelTiny("To")}
+                <DatePillPicker label="To" value={to} onChange={setTo} allowClear />
+              </div>
 
-  {/* Filters */}
-  <div className="border-t border-border/60 bg-background/35 px-4 py-4 sm:px-6">
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6 lg:items-end">
-      {/* From */}
-      <div className="space-y-1 lg:col-span-1">
-        {labelTiny("From")}
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          className={fieldBase}
-        />
-      </div>
+              <div className="space-y-1">
+                {labelTiny("Category")}
+                <select
+                  value={categoryFilter}
+                  onChange={(e) =>
+                    setCategoryFilter(e.target.value as (typeof FILTER_CATEGORIES)[number])
+                  }
+                  className="h-10 rounded-full border border-border/70 bg-background/70 px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {FILTER_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-      {/* To */}
-      <div className="space-y-1 lg:col-span-1">
-        {labelTiny("To")}
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          className={fieldBase}
-        />
-      </div>
+              <div className="space-y-1">
+                {labelTiny("Mode")}
+                <select
+                  value={modeFilter}
+                  onChange={(e) =>
+                    setModeFilter(
+                      e.target.value === "All"
+                        ? "All"
+                        : (e.target.value as Expense["paymentMode"])
+                    )
+                  }
+                  className="h-10 rounded-full border border-border/70 bg-background/70 px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <option value="All">All</option>
+                  {PAYMENT_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-      {/* Category */}
-      <div className="space-y-1 lg:col-span-1">
-        {labelTiny("Category")}
-        <div className="relative">
-          <select
-            value={categoryFilter}
-            onChange={(e) =>
-              setCategoryFilter(e.target.value as (typeof FILTER_CATEGORIES)[number])
-            }
-            className={`${fieldBase} appearance-none pr-10`}
-          >
-            {FILTER_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] text-muted">
-            ▾
-          </span>
+              <div className="flex items-end gap-2">
+                <button type="button" onClick={clearFilters} className={`${chipBase} h-10`}>
+                  Clear
+                </button>
+                <button type="button" onClick={manualRefresh} className={`${chipBase} h-10`}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick range + status */}
+          <div className="mt-4 flex flex-col gap-2 border-t border-border/60 pt-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                Quick range
+              </span>
+
+              <button
+                type="button"
+                onClick={setRangeAllTime}
+                className={`${chipBase} shrink-0 ${from === "" && to === "" ? "text-foreground" : ""}`}
+              >
+                All time
+              </button>
+
+              <button
+                type="button"
+                onClick={setRangeToday}
+                className={`${chipBase} shrink-0 ${
+                  isSameRange(from, to, today, today) ? "text-foreground" : ""
+                }`}
+              >
+                Today
+              </button>
+
+              <button
+                type="button"
+                onClick={setRangeLast7}
+                className={`${chipBase} shrink-0 ${
+                  isSameRange(from, to, last7From, today) ? "text-foreground" : ""
+                }`}
+              >
+                Last 7
+              </button>
+
+              <button
+                type="button"
+                onClick={setRangeThisMonth}
+                className={`${chipBase} shrink-0 ${
+                  isSameRange(from, to, thisMonthFrom, thisMonthTo) ? "text-foreground" : ""
+                }`}
+              >
+                This month
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 md:justify-end">
+              <span className={chipBase}>
+                Total{" "}
+                <span className="font-semibold text-foreground">{inr(summary.totalAmount)}</span>
+              </span>
+              <span className={chipBase}>
+                Entries{" "}
+                <span className="font-semibold text-foreground">{expenses.length}</span>
+              </span>
+
+              <span className="text-[11px] text-muted md:text-right">
+                {loadingList ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                    Loading…
+                  </span>
+                ) : listError ? (
+                  <span className="text-danger">{listError}</span>
+                ) : lastSync ? (
+                  <span>Synced {lastSync.toLocaleTimeString()}</span>
+                ) : (
+                  <span />
+                )}
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* Mode */}
-      <div className="space-y-1 lg:col-span-1">
-        {labelTiny("Mode")}
-        <div className="relative">
-          <select
-            value={modeFilter}
-            onChange={(e) =>
-              setModeFilter(
-                e.target.value === "All" ? "All" : (e.target.value as Expense["paymentMode"])
-              )
-            }
-            className={`${fieldBase} appearance-none pr-10`}
-          >
-            <option value="All">All</option>
-            {PAYMENT_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] text-muted">
-            ▾
-          </span>
-        </div>
-      </div>
-
-      {/* Search (spans wider on larger screens) */}
-      <div className="space-y-1 md:col-span-2 lg:col-span-2">
-        {labelTiny("Search")}
-        <div className="relative">
-          
-          <input
-            placeholder="Description / notes / category"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className={`${fieldBase} pl-9`}
-          />
-        </div>
-      </div>
-    </div>
-
-    {/* Actions + Stats row */}
-    <div className="mt-4 flex flex-col gap-2 border-t border-border/60 pt-3 lg:flex-row lg:items-center lg:justify-between">
-      {/* Left actions */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={clearFilters} className={chipBase}>
-          Clear
-        </button>
-        <button type="button" onClick={manualRefresh} className={chipBase}>
-          Refresh
-        </button>
-      </div>
-
-      {/* Right stats (scrollable on small screens) */}
-      <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:justify-end">
-        <span className={chipBase}>
-          Total <span className="font-semibold text-foreground">{inr(summary.totalAmount)}</span>
-        </span>
-        <span className={chipBase}>
-          Entries <span className="font-semibold text-foreground">{expenses.length}</span>
-        </span>
-        {summary.topCategories[0] ? (
-          <span className={chipBase}>
-            Top{" "}
-            <span className="font-semibold text-foreground">
-              {summary.topCategories[0][0]} ({inr(summary.topCategories[0][1])})
-            </span>
-          </span>
-        ) : null}
-      </div>
-    </div>
-
-    {/* Quick range + status */}
-    <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3 md:flex-row md:items-center md:justify-between">
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-          Quick range
-        </span>
-
-        <button
-          type="button"
-          onClick={setRangeAllTime}
-          className={`${chipBase} shrink-0 ${from === "" && to === "" ? "text-foreground" : ""}`}
-        >
-          All time
-        </button>
-
-        <button
-          type="button"
-          onClick={setRangeToday}
-          className={`${chipBase} shrink-0 ${
-            isSameRange(from, to, today, today) ? "text-foreground" : ""
-          }`}
-        >
-          Today
-        </button>
-
-        <button
-          type="button"
-          onClick={setRangeLast7}
-          className={`${chipBase} shrink-0 ${
-            isSameRange(from, to, last7From, today) ? "text-foreground" : ""
-          }`}
-        >
-          Last 7
-        </button>
-
-        <button
-          type="button"
-          onClick={setRangeThisMonth}
-          className={`${chipBase} shrink-0 ${
-            isSameRange(from, to, thisMonthFrom, thisMonthTo) ? "text-foreground" : ""
-          }`}
-        >
-          This month
-        </button>
-      </div>
-
-      <div className="text-[11px] text-muted md:text-right">
-        {loadingList ? (
-          <span className="inline-flex items-center gap-2">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-            Loading…
-          </span>
-        ) : listError ? (
-          <span className="text-danger">{listError}</span>
-        ) : lastSync ? (
-          <span>Synced {lastSync.toLocaleTimeString()}</span>
-        ) : (
-          <span />
-        )}
-      </div>
-    </div>
-  </div>
-</section>
-
-
+      </section>
 
       {/* Table */}
       <section className="rounded-2xl border border-border bg-card px-3 py-3 shadow-sm sm:px-4 sm:py-4">
@@ -776,12 +1061,7 @@ export default function ExpensesClient({ initialExpenses }: Props) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-muted">Date</label>
-                  <input
-                    type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  />
+                  <DatePillPicker label="Date" value={formDate} onChange={setFormDate} />
                 </div>
 
                 <div className="space-y-1">

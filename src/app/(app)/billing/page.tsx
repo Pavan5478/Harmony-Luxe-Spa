@@ -1,7 +1,7 @@
 ﻿// src/app/(app)/billing/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { BillLine, Customer, CustomerDraft } from "@/types/billing";
 import { computeTotals } from "@/lib/totals";
@@ -14,6 +14,321 @@ import BillingActions from "@/components/billing/Actions";
 import ExtrasCard from "@/components/billing/ExtrasCard";
 
 type Item = { id: string; name: string; variant?: string; price: number };
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function toYMDLocal(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+function parseYMDLocal(ymd: string) {
+  // force local midnight to avoid timezone shifting
+  return new Date(`${ymd}T00:00:00`);
+}
+function sameYMD(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function CalendarIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M7 3v3M17 3v3M4.5 8.5h15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 12h3M13.5 12h3M7.5 16h3M13.5 16h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M15 18l-6-6 6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function ChevronRightIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M9 18l6-6-6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function InvoiceDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  const selected = useMemo(() => {
+    try {
+      return value ? parseYMDLocal(value) : new Date();
+    } catch {
+      return new Date();
+    }
+  }, [value]);
+
+  const [view, setView] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+
+  useEffect(() => {
+    // when value changes from outside (edit), keep view in same month
+    setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
+  }, [selected]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!open) return;
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (popRef.current?.contains(t)) return;
+      if (anchorRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (!open) return;
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const fmtLong = useMemo(() => {
+    const f = new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    return f.format(selected);
+  }, [selected]);
+
+  const today = useMemo(() => new Date(), []);
+  const monthLabel = useMemo(() => {
+    return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(view);
+  }, [view]);
+
+  const firstDay = useMemo(() => new Date(view.getFullYear(), view.getMonth(), 1), [view]);
+  const startWeekday = firstDay.getDay(); // 0 Sun .. 6 Sat
+  const daysInMonth = useMemo(() => {
+    return new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+  }, [view]);
+
+  const cells = useMemo(() => {
+    const arr: { date: Date; inMonth: boolean }[] = [];
+    // grid starts from Sunday
+    const gridStart = new Date(view.getFullYear(), view.getMonth(), 1 - startWeekday);
+
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart);
+      d.setDate(gridStart.getDate() + i);
+      arr.push({ date: d, inMonth: d.getMonth() === view.getMonth() });
+    }
+    return arr;
+  }, [view, startWeekday]);
+
+  function pick(d: Date) {
+    const ymd = toYMDLocal(d);
+    onChange(ymd);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" ref={anchorRef}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground sm:text-base">Invoice date</h2>
+          <p className="mt-1 text-[11px] text-muted sm:text-xs">
+            Choose the invoice date before saving/finalizing.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full bg-background px-3 py-2 text-xs font-semibold text-foreground ring-1 ring-border/70">
+            <CalendarIcon className="text-muted" />
+            <span className="tabular-nums">{value}</span>
+            <span className="hidden text-[11px] font-medium text-muted sm:inline">• {fmtLong}</span>
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setOpen((p) => !p)}
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground shadow-sm hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            aria-haspopup="dialog"
+            aria-expanded={open}
+          >
+            <CalendarIcon />
+            Pick
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChange(toYMDLocal(new Date()))}
+            className="inline-flex items-center rounded-full border border-border bg-background px-3 py-2 text-xs font-semibold text-muted hover:bg-card hover:text-foreground"
+          >
+            Today
+          </button>
+
+          {/* Hidden native date input (helps mobile keyboards + accessibility), stays in sync */}
+          <input
+            type="date"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="sr-only"
+            aria-label="Invoice date"
+          />
+        </div>
+      </div>
+
+      {open ? (
+        <div
+          ref={popRef}
+          role="dialog"
+          aria-label="Select invoice date"
+          className="absolute right-0 top-full z-50 mt-3 w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card shadow-card sm:w-[360px]"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2 border-b border-border bg-background/40 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-card"
+              aria-label="Previous month"
+            >
+              <ChevronLeftIcon />
+            </button>
+
+            <div className="min-w-0 text-center">
+              <div className="text-sm font-semibold text-foreground">{monthLabel}</div>
+              <div className="text-[11px] text-muted">
+                Selected: <span className="font-medium text-foreground tabular-nums">{value}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground hover:bg-card"
+              aria-label="Next month"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+
+          {/* Week header */}
+          <div className="grid grid-cols-7 gap-1 px-3 pt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => (
+              <div key={w}>{w}</div>
+            ))}
+          </div>
+
+          {/* Days grid */}
+          <div className="grid grid-cols-7 gap-1 px-3 py-3">
+            {cells.map(({ date, inMonth }, i) => {
+              const isSel = sameYMD(date, selected);
+              const isToday = sameYMD(date, today);
+
+              return (
+                <button
+                  key={`${date.toISOString()}-${i}`}
+                  type="button"
+                  onClick={() => pick(date)}
+                  className={[
+                    "relative inline-flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    inMonth ? "text-foreground" : "text-muted/60",
+                    isSel
+                      ? "bg-primary/15 text-primary ring-1 ring-primary/25"
+                      : "bg-background/50 hover:bg-card",
+                  ].join(" ")}
+                  aria-pressed={isSel}
+                >
+                  <span className="tabular-nums">{date.getDate()}</span>
+
+                  {isToday && !isSel ? (
+                    <span
+                      className="absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary"
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-background/40 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => {
+                const d = new Date();
+                setView(new Date(d.getFullYear(), d.getMonth(), 1));
+                onChange(toYMDLocal(d));
+                setOpen(false);
+              }}
+              className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-card"
+            >
+              Jump to today
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted hover:bg-card hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function BillingPage() {
   const router = useRouter();
@@ -49,23 +364,19 @@ export default function BillingPage() {
   const [gstRate, setGstRate] = useState<number>(0.05);
   const [interState, setInterState] = useState(false);
 
-  const [paymentMode, setPaymentMode] = useState<
-    "CASH" | "CARD" | "UPI" | "SPLIT"
-  >("CASH");
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "CARD" | "UPI" | "SPLIT">("CASH");
   const [split, setSplit] = useState<{ cash?: number; card?: number; upi?: number }>({});
   const [notes, setNotes] = useState("");
 
-  // Manual invoice date (YYYY-MM-DD)
-  const [invoiceDate, setInvoiceDate] = useState<string>(() =>
-    new Date().toISOString().slice(0, 10),
-  );
+  // Manual invoice date (YYYY-MM-DD) (local)
+  const [invoiceDate, setInvoiceDate] = useState<string>(() => toYMDLocal(new Date()));
 
   const [cashierEmail, setCashierEmail] = useState("cashier@harmoneyluxe.com");
 
   // track original status when editing (DRAFT / FINAL / VOID)
-  const [initialStatus, setInitialStatus] = useState<
-    "DRAFT" | "FINAL" | "VOID" | undefined
-  >(undefined);
+  const [initialStatus, setInitialStatus] = useState<"DRAFT" | "FINAL" | "VOID" | undefined>(
+    undefined
+  );
 
   // Load items
   useEffect(() => {
@@ -95,7 +406,7 @@ export default function BillingPage() {
       const ids = JSON.parse(raw);
       if (!Array.isArray(ids)) return;
       const validIds = ids.filter(
-        (id: unknown) => typeof id === "string" && items.some((it) => it.id === id),
+        (id: unknown) => typeof id === "string" && items.some((it) => it.id === id)
       ) as string[];
       setRecentItemIds(validIds.slice(0, 8));
     } catch {
@@ -153,14 +464,14 @@ export default function BillingPage() {
         setSplit(bill.split ?? {});
         setNotes(bill.notes ?? "");
 
-        // invoice date
+        // invoice date (keep LOCAL day)
         try {
           const rawDate: string =
             bill.billDate || bill.finalizedAt || bill.createdAt || new Date().toISOString();
           const d = new Date(rawDate);
-          if (!isNaN(d.getTime())) setInvoiceDate(d.toISOString().slice(0, 10));
+          if (!isNaN(d.getTime())) setInvoiceDate(toYMDLocal(d));
         } catch {
-          setInvoiceDate(new Date().toISOString().slice(0, 10));
+          setInvoiceDate(toYMDLocal(new Date()));
         }
       } catch (err) {
         console.error("Error loading bill for edit", err);
@@ -169,54 +480,47 @@ export default function BillingPage() {
   }, [editKey]);
 
   function addLine(it: Item) {
-  setLines((prev) => {
-    // Match same item (id + variant) so variants remain separate if you use them
-    const v = (it.variant ?? "").trim();
-    const ix = prev.findIndex(
-      (l) => l.itemId === it.id && ((l.variant ?? "").trim() === v)
-    );
+    setLines((prev) => {
+      const v = (it.variant ?? "").trim();
+      const ix = prev.findIndex((l) => l.itemId === it.id && ((l.variant ?? "").trim() === v));
 
-    if (ix === -1) {
-      // create new line
-      return [
-        ...prev,
-        {
-          itemId: it.id,
-          name: it.name,
-          variant: it.variant,
-          qty: 1,
-          rate: it.price,
-          amount: it.price,
-        },
-      ];
-    }
+      if (ix === -1) {
+        return [
+          ...prev,
+          {
+            itemId: it.id,
+            name: it.name,
+            variant: it.variant,
+            qty: 1,
+            rate: it.price,
+            amount: it.price,
+          },
+        ];
+      }
 
-    // increase qty on existing line
-    const next = prev.slice();
-    const line = next[ix];
-    const nextQty = Math.max(1, Number(line.qty || 1) + 1);
-    const rate = Number(line.rate || it.price || 0);
+      const next = prev.slice();
+      const line = next[ix];
+      const nextQty = Math.max(1, Number(line.qty || 1) + 1);
+      const rate = Number(line.rate || it.price || 0);
 
-    next[ix] = {
-      ...line,
-      qty: nextQty,
-      rate,
-      amount: rate * nextQty,
-    };
+      next[ix] = {
+        ...line,
+        qty: nextQty,
+        rate,
+        amount: rate * nextQty,
+      };
 
-    return next;
-  });
+      return next;
+    });
 
-  // recent items stays same
-  setRecentItemIds((prev) => {
-    const next = [it.id, ...prev.filter((id) => id !== it.id)].slice(0, 8);
-    try {
-      localStorage.setItem("bb.recentItems", JSON.stringify(next));
-    } catch {}
-    return next;
-  });
-}
-
+    setRecentItemIds((prev) => {
+      const next = [it.id, ...prev.filter((id) => id !== it.id)].slice(0, 8);
+      try {
+        localStorage.setItem("bb.recentItems", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
 
   function onQty(ix: number, q: number) {
     setLines((p) => p.map((l, i) => (i === ix ? { ...l, qty: q, amount: l.rate * q } : l)));
@@ -235,7 +539,7 @@ export default function BillingPage() {
       recentItemIds
         .map((id) => items.find((it) => it.id === id))
         .filter((it): it is Item => Boolean(it)),
-    [recentItemIds, items],
+    [recentItemIds, items]
   );
 
   function clearRecentItems() {
@@ -254,17 +558,15 @@ export default function BillingPage() {
         gstRate,
         interState,
       }),
-    [lines, discount, gstRate, interState],
+    [lines, discount, gstRate, interState]
   );
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.rate * l.qty, 0), [lines]);
 
-  const discountTooHigh =
-    discount.flat + subtotal * (discount.pct / 100) > subtotal + 0.001;
+  const discountTooHigh = discount.flat + subtotal * (discount.pct / 100) > subtotal + 0.001;
 
   const splitSum = (split.cash || 0) + (split.card || 0) + (split.upi || 0);
-  const splitMismatch =
-    paymentMode === "SPLIT" && Math.round(splitSum) !== Math.round(totals.grandTotal);
+  const splitMismatch = paymentMode === "SPLIT" && Math.round(splitSum) !== Math.round(totals.grandTotal);
 
   const customerValid = customer.name.trim().length > 0 && customer.phone.trim().length > 0;
   const needsItems = lines.length === 0;
@@ -284,38 +586,23 @@ export default function BillingPage() {
     split,
     notes,
     totals,
-    billDate: invoiceDate ? new Date(invoiceDate).toISOString() : undefined,
+    // local day -> ISO at local midnight (stable)
+    billDate: invoiceDate ? new Date(`${invoiceDate}T00:00:00`).toISOString() : undefined,
   };
 
   return (
-    <div className="space-y-5 lg:space-y-6">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)]">
-        {/* LEFT COLUMN: Date -> Customer -> Items -> Discount/Tax/Notes */}
-        <div className="space-y-4">
-          {/* Invoice date (top-left) */}
-          <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground sm:text-base">
-                  Invoice date
-                </h2>
-                <p className="mt-1 text-[11px] text-muted sm:text-xs">
-                  Choose the invoice date before saving/finalizing.
-                </p>
-              </div>
-              <div className="min-w-[180px]">
-                <input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full rounded-full border border-border bg-background px-3 py-2 text-xs shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                />
-              </div>
-            </div>
+    // pb for mobile bottom-nav space
+    <div className="min-w-0 space-y-5 pb-24 lg:space-y-6 lg:pb-0">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)]">
+        {/* LEFT COLUMN */}
+        <div className="min-w-0 space-y-4">
+          {/* Invoice date */}
+          <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+            <InvoiceDatePicker value={invoiceDate} onChange={setInvoiceDate} />
           </section>
 
           {/* Customer details */}
-          <section className="">
+          <section className="min-w-0">
             <div className="mt-3">
               <CustomerCard
                 value={customer}
@@ -331,22 +618,20 @@ export default function BillingPage() {
           </section>
 
           {/* Items */}
-          <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+          <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground sm:text-base">
-                  Items
-                </h2>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-foreground sm:text-base">Items</h2>
               </div>
               <div className="text-[11px] text-muted">
                 Subtotal:{" "}
-                <span className="font-semibold text-foreground">
+                <span className="font-semibold text-foreground tabular-nums">
                   ₹{subtotal.toFixed(2)}
                 </span>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-3 min-w-0">
               <ItemPicker
                 items={items}
                 onPick={addLine}
@@ -356,11 +641,13 @@ export default function BillingPage() {
               />
             </div>
 
-            <LineItemsTable lines={lines} onQty={onQty} onRemove={onRemove} />
+            <div className="min-w-0">
+              <LineItemsTable lines={lines} onQty={onQty} onRemove={onRemove} />
+            </div>
           </section>
 
           {/* Discount + Tax + Notes */}
-          <section>
+          <section className="min-w-0">
             <div className="mt-3">
               <ExtrasCard
                 discount={discount}
@@ -376,8 +663,8 @@ export default function BillingPage() {
           </section>
         </div>
 
-        {/* RIGHT COLUMN: keep as it is */}
-        <div className="space-y-4">
+        {/* RIGHT COLUMN */}
+        <div className="min-w-0 space-y-4">
           <TotalsCard totals={totals} interState={interState} onInterState={setInterState} />
 
           <PaymentCard
@@ -398,7 +685,10 @@ export default function BillingPage() {
               {splitMismatch && (
                 <div className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
                   Split amounts must add up to grand total{" "}
-                  <span className="font-semibold">(₹{totals.grandTotal.toFixed(2)})</span>.
+                  <span className="font-semibold tabular-nums">
+                    (₹{totals.grandTotal.toFixed(2)})
+                  </span>
+                  .
                 </div>
               )}
               {needsItems && (
@@ -415,7 +705,7 @@ export default function BillingPage() {
             </div>
           )}
 
-          <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+          <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <BillingActions
               payload={payload}
               showSave={!isEditing}

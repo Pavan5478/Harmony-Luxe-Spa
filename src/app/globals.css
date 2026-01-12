@@ -196,12 +196,23 @@ a:hover {
   border-radius: calc(var(--radius-xs) + 2px);
 }
 
+/* Make the overall app shell responsive by default. On narrow screens,
+   collapse the layout into a single column so that hidden sidebars do not
+   occupy space. On larger screens, restore the two-column layout. */
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  /* Use a single column by default to prevent empty sidebar columns on small screens */
+  grid-template-columns: 1fr;
   gap: 0;
   background: transparent;
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    /* On large screens, allocate a sidebar column (auto width) and a main column */
+    grid-template-columns: auto minmax(0, 1fr);
+  }
 }
 
 .app-main {
@@ -507,11 +518,9 @@ a:hover {
   .invoice-scale {
     --scale: 1 !important;
   }
-  
 }
 
 .app-main > div:has(.invoice-shell) {
   max-width: none !important;
   width: 100% !important;
 }
-

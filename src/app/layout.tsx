@@ -1,4 +1,5 @@
-﻿import type { Metadata } from "next";
+﻿// src/app/layout.tsx
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { cookies } from "next/headers";
 
@@ -7,11 +8,10 @@ export const metadata: Metadata = {
   description: "Billing suite",
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({
@@ -29,7 +29,9 @@ export default async function RootLayout({
       className={isDark ? "theme-dark" : ""}
       suppressHydrationWarning
     >
-      <body className="min-h-screen text-foreground antialiased">{children}</body>
+      <body className="min-h-screen overflow-x-hidden text-foreground antialiased">
+        {children}
+      </body>
     </html>
   );
 }

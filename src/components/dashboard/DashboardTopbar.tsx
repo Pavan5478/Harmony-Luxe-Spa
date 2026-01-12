@@ -1,3 +1,4 @@
+// src/components/dashboard/DashboardTopbar.tsx
 import Link from "next/link";
 
 export default function DashboardTopbar({
@@ -39,7 +40,13 @@ export default function DashboardTopbar({
         {showCreateBill ? (
           <Link
             href="/billing"
-            className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-black shadow-sm hover:bg-primary/90"
+            className={[
+              "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm transition",
+              "bg-primary hover:bg-primary/90",
+              // FORCE readable text (prevents it turning white)
+              "!text-[color:var(--on-primary)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+            ].join(" ")}
           >
             + Create bill
           </Link>
