@@ -5,27 +5,55 @@ import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-// List all bills (used by Invoices / Dashboard, etc.)
-export async function GET(_req: NextRequest) {
-  const bills = await listBills();
-  return NextResponse.json({ bills });
+function jsonNoStore(data: any, init?: ResponseInit) {
+  const res = NextResponse.json(data, init);
+  res.headers.set("Cache-Control", "no-store");
+  return res;
 }
 
-// Create a new DRAFT bill
+/**
+ * GET – List all bills (used by Invoices / Dashboard, etc.)
+ * ✅ Protected (must be logged in)
+ */
+export async function GET(_req: NextRequest) {
+  const session = await getSession();
+  const role = session.user?.role;
+
+  if (!session.user) {
+    return jsonNoStore({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (role !== "ADMIN" && role !== "ACCOUNTS" && role !== "CASHIER") {
+    return jsonNoStore({ ok: false, error: "Forbidden" }, { status: 403 });
+  }
+
+  const bills = await listBills();
+  return jsonNoStore({ ok: true, bills });
+}
+
+/**
+ * POST – Create a new DRAFT bill
+ * ✅ Protected + role-based
+ */
 export async function POST(req: NextRequest) {
   const session = await getSession();
   const role = session.user?.role;
 
   if (!session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonNoStore({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   if (role !== "ADMIN" && role !== "CASHIER") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return jsonNoStore({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
-  const data = await req.json();
-  const draft = await createDraft(data);
+  let data: any = {};
+  try {
+    data = await req.json();
+  } catch {
+    data = {};
+  }
 
-  return NextResponse.json({ id: draft.id, bill: draft });
+  const draft = await createDraft(data);
+  return jsonNoStore({ ok: true, id: draft.id, bill: draft });
 }

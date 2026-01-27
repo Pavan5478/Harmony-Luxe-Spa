@@ -38,21 +38,32 @@
   --card: #ffffff;
   --card-2: #f1f5f9;
 
-  --border: rgba(15, 23, 42, 0.12);
-  --border-2: rgba(15, 23, 42, 0.18);
+  /* Slightly stronger borders for better UI visibility */
+  --border: rgba(15, 23, 42, 0.14);
+  --border-2: rgba(15, 23, 42, 0.22);
 
-  --ring: rgba(200, 146, 18, 0.6);
+  /* Stronger focus ring for visibility on light backgrounds */
+  --ring: rgba(200, 146, 18, 0.78);
 
+  /*
+    Primary color is used for BOTH text accents (text-primary) and solid surfaces (bg-primary).
+    Therefore we must provide a contrasting "on-primary" that works when bg-primary is used.
+
+    Light theme: primary is dark brown -> on-primary must be light.
+    Dark theme: primary is light gold -> on-primary must be dark.
+  */
   --primary-ui: var(--primary-800);
-  --on-primary: #0b0f1a;
+  --on-primary: var(--primary-50);
+
   --link: #7a540a;
+  --link-on-primary: var(--on-primary);
 
   --chrome-bg: rgba(248, 250, 252, 0.86);
   --chrome-border: rgba(15, 23, 42, 0.1);
 
   --input-bg: #ffffff;
-  --input-border: rgba(15, 23, 42, 0.18);
-  --input-border-hover: rgba(15, 23, 42, 0.26);
+  --input-border: rgba(15, 23, 42, 0.22);
+  --input-border-hover: rgba(15, 23, 42, 0.34);
 
   --row-hover: rgba(2, 6, 23, 0.035);
 
@@ -88,18 +99,20 @@
   --border: rgba(248, 191, 64, 0.24);
   --border-2: rgba(248, 191, 64, 0.36);
 
-  --ring: rgba(242, 195, 64, 0.76);
+  --ring: rgba(242, 195, 64, 0.82);
 
   --primary-ui: var(--primary-400);
   --on-primary: #0b0b10;
+
   --link: var(--primary-300);
+  --link-on-primary: var(--on-primary);
 
   --chrome-bg: rgba(5, 5, 9, 0.82);
   --chrome-border: rgba(248, 191, 64, 0.16);
 
   --input-bg: rgba(20, 20, 28, 0.92);
-  --input-border: rgba(148, 163, 184, 0.3);
-  --input-border-hover: rgba(148, 163, 184, 0.44);
+  --input-border: rgba(148, 163, 184, 0.36);
+  --input-border-hover: rgba(148, 163, 184, 0.5);
 
   --row-hover: rgba(148, 163, 184, 0.08);
 
@@ -124,6 +137,10 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-info: var(--info);
+
+  /* Optional helpers (usable as text-link, text-link-on-primary if you choose) */
+  --color-link: var(--link);
+  --color-link-on-primary: var(--link-on-primary);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -235,6 +252,26 @@ a:hover {
   }
 }
 
+.surface-primary {
+  background: var(--primary-ui);
+  color: var(--on-primary);
+}
+
+.surface-primary a {
+  color: var(--link-on-primary);
+}
+
+/*
+  Safety net:
+  Many components currently use bg-primary with text-black / text-white.
+  Force solid primary buttons + links to use the correct theme foreground.
+  (Also overrides Tailwind's !text-black in a few places.)
+*/
+button.bg-primary,
+a.bg-primary {
+  color: var(--on-primary) !important;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -292,6 +329,15 @@ a:hover {
 
 .btn-primary:hover {
   filter: brightness(1.02);
+}
+
+.btn-primary-ui {
+  background: var(--primary-ui);
+  border-color: color-mix(in oklab, var(--primary-ui), black 12%);
+  color: var(--on-primary);
+}
+.btn-primary-ui:hover {
+  filter: brightness(1.04);
 }
 
 .btn-ghost {

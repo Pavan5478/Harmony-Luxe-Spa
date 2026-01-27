@@ -1,4 +1,3 @@
-// src/app/(app)/invoices/[...id]/page.tsx
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { getBill } from "@/store/bills";
@@ -12,10 +11,26 @@ type PageProps = {
 
 export const dynamic = "force-dynamic";
 
+const IST_TZ = "Asia/Kolkata";
+
+function safeDecode(v: string) {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
+function normalizeStatus(raw: unknown): "DRAFT" | "FINAL" | "VOID" {
+  const s = String(raw ?? "").trim().toUpperCase();
+  if (s === "DRAFT" || s === "FINAL" || s === "VOID") return s;
+  return "FINAL";
+}
+
 function formatPrintedAt(iso: string) {
   try {
     return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata",
+      timeZone: IST_TZ,
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -31,7 +46,7 @@ function formatPrintedAt(iso: string) {
 function formatBillDate(d: Date) {
   try {
     return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata",
+      timeZone: IST_TZ,
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -51,7 +66,7 @@ export default async function InvoicePage(props: PageProps) {
 
   const idParam = params.id;
   const segments = Array.isArray(idParam) ? idParam : [idParam];
-  const key = decodeURIComponent(segments.join("/")).trim();
+  const key = segments.map((s) => safeDecode(String(s))).join("/").trim();
 
   const found = await getBill(key);
   if (!found) notFound();
@@ -61,8 +76,7 @@ export default async function InvoicePage(props: PageProps) {
   const billDateISO = bill.billDate || bill.finalizedAt || bill.createdAt;
   const billDate = billDateISO ? new Date(billDateISO) : new Date();
 
-  const status: "DRAFT" | "FINAL" | "VOID" =
-    (bill.status as "DRAFT" | "FINAL" | "VOID") || "FINAL";
+  const status = normalizeStatus(bill.status);
 
   const printedAt: string | null = bill.printedAt || null;
   const printedAtLabel: string | null = printedAt ? formatPrintedAt(printedAt) : null;
@@ -91,7 +105,7 @@ export default async function InvoicePage(props: PageProps) {
       <InvoiceWorkspace
         idOrNo={idOrNo}
         printedAt={printedAt}
-        printedAtLabel={printedAtLabel} // ✅ now valid
+        printedAtLabel={printedAtLabel}
         status={status}
         autoPrint={autoPrint && status === "FINAL"}
         backHref={backHref}

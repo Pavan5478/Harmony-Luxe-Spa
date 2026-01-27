@@ -268,24 +268,30 @@ export default function Sidebar() {
       {/* Desktop sidebar (unchanged) */}
       <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col overflow-x-hidden border-r border-border bg-card/95 shadow-sm backdrop-blur lg:flex">
         <div className="flex h-16 items-center gap-3 border-b border-border px-4">
-          <Link
-            href="/dashboard"
-            prefetch={false}
-            className="flex min-w-0 items-center gap-3"
-            aria-label="Go to Dashboard"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background shadow ring-1 ring-primary/20">
-              <span className="text-xs font-semibold text-primary">XS</span>
-            </div>
+  <Link
+    href="/dashboard"
+    prefetch={false}
+    className="flex min-w-0 items-center gap-3"
+    aria-label="Go to Dashboard"
+  >
+    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background shadow ring-1 ring-primary/20 overflow-hidden">
+      <img
+        src="/harmony_luxe.png"
+        alt="Harmony Luxe logo"
+        className="h-6 w-6 object-contain"
+      />
+    </div>
 
-            <div className="flex min-w-0 flex-col leading-tight">
-              <span className="truncate text-sm font-semibold text-foreground">
-                Harmony Luxe
-              </span>
-              <span className="truncate text-[11px] text-muted">Billing &amp; reports</span>
-            </div>
-          </Link>
-        </div>
+    <div className="flex min-w-0 flex-col leading-tight">
+      <span className="truncate text-sm font-semibold text-foreground">
+        Harmony Luxe
+      </span>
+      <span className="truncate text-[11px] text-muted">
+        Billing &amp; reports
+      </span>
+    </div>
+  </Link>
+</div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted">

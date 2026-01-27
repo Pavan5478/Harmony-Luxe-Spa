@@ -15,6 +15,23 @@ import ExtrasCard from "@/components/billing/ExtrasCard";
 
 type Item = { id: string; name: string; variant?: string; price: number };
 
+// ---- Money helpers (avoid float mismatches) ----
+function toPaise(v: number): number {
+  return Math.round((Number(v) || 0) * 100);
+}
+function fromPaise(p: number): number {
+  return p / 100;
+}
+function pctOfPaise(basePaise: number, pct: number): number {
+  return Math.round(basePaise * ((Number(pct) || 0) / 100));
+}
+function calcLineAmount(rate: number, qty: number): number {
+  // rate in ₹, qty may be decimal
+  const ratePaise = toPaise(rate);
+  const linePaise = Math.round(ratePaise * (Number(qty) || 0));
+  return fromPaise(linePaise);
+}
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -113,7 +130,6 @@ function InvoiceDatePicker({
   const [view, setView] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
 
   useEffect(() => {
-    // when value changes from outside (edit), keep view in same month
     setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
   }, [selected]);
 
@@ -154,14 +170,13 @@ function InvoiceDatePicker({
   }, [view]);
 
   const firstDay = useMemo(() => new Date(view.getFullYear(), view.getMonth(), 1), [view]);
-  const startWeekday = firstDay.getDay(); // 0 Sun .. 6 Sat
+  const startWeekday = firstDay.getDay();
   const daysInMonth = useMemo(() => {
     return new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
   }, [view]);
 
   const cells = useMemo(() => {
     const arr: { date: Date; inMonth: boolean }[] = [];
-    // grid starts from Sunday
     const gridStart = new Date(view.getFullYear(), view.getMonth(), 1 - startWeekday);
 
     for (let i = 0; i < 42; i++) {
@@ -214,7 +229,6 @@ function InvoiceDatePicker({
             Today
           </button>
 
-          {/* Hidden native date input (helps mobile keyboards + accessibility), stays in sync */}
           <input
             type="date"
             value={value}
@@ -232,7 +246,6 @@ function InvoiceDatePicker({
           aria-label="Select invoice date"
           className="absolute right-0 top-full z-50 mt-3 w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card shadow-card sm:w-[360px]"
         >
-          {/* Header */}
           <div className="flex items-center justify-between gap-2 border-b border-border bg-background/40 px-3 py-2">
             <button
               type="button"
@@ -260,14 +273,12 @@ function InvoiceDatePicker({
             </button>
           </div>
 
-          {/* Week header */}
           <div className="grid grid-cols-7 gap-1 px-3 pt-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => (
               <div key={w}>{w}</div>
             ))}
           </div>
 
-          {/* Days grid */}
           <div className="grid grid-cols-7 gap-1 px-3 py-3">
             {cells.map(({ date, inMonth }, i) => {
               const isSel = sameYMD(date, selected);
@@ -301,7 +312,6 @@ function InvoiceDatePicker({
             })}
           </div>
 
-          {/* Footer */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-background/40 px-3 py-2">
             <button
               type="button"
@@ -336,7 +346,6 @@ export default function BillingPage() {
   const editKey = sp.get("edit");
   const isEditing = !!editKey;
 
-  // role gate (client-side)
   useEffect(() => {
     (async () => {
       try {
@@ -361,24 +370,25 @@ export default function BillingPage() {
 
   const [lines, setLines] = useState<BillLine[]>([]);
   const [discount, setDiscount] = useState({ flat: 0, pct: 0 });
-  const [gstRate, setGstRate] = useState<number>(0.05);
+
+  // IMPORTANT: your edit flow defaults GST to 0.00, but new bill was 0.00.
+  // Keep consistent to prevent accidental "no GST" invoices.
+  const [gstRate, setGstRate] = useState<number>(0.0);
+
   const [interState, setInterState] = useState(false);
 
   const [paymentMode, setPaymentMode] = useState<"CASH" | "CARD" | "UPI" | "SPLIT">("CASH");
   const [split, setSplit] = useState<{ cash?: number; card?: number; upi?: number }>({});
   const [notes, setNotes] = useState("");
 
-  // Manual invoice date (YYYY-MM-DD) (local)
   const [invoiceDate, setInvoiceDate] = useState<string>(() => toYMDLocal(new Date()));
 
-  const [cashierEmail, setCashierEmail] = useState("cashier@harmoneyluxe.com");
+  const [cashierEmail, setCashierEmail] = useState("cashier@harmonyluxe.com");
 
-  // track original status when editing (DRAFT / FINAL / VOID)
   const [initialStatus, setInitialStatus] = useState<"DRAFT" | "FINAL" | "VOID" | undefined>(
     undefined
   );
 
-  // Load items
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -397,7 +407,6 @@ export default function BillingPage() {
     };
   }, []);
 
-  // Hydrate recent items once items are available
   useEffect(() => {
     if (!items.length) return;
     try {
@@ -414,7 +423,6 @@ export default function BillingPage() {
     }
   }, [items]);
 
-  // Load cashier email
   useEffect(() => {
     try {
       const stored = localStorage.getItem("bb.email");
@@ -424,7 +432,6 @@ export default function BillingPage() {
     }
   }, []);
 
-  // Edit existing bill
   useEffect(() => {
     if (!editKey) return;
 
@@ -458,13 +465,12 @@ export default function BillingPage() {
           pct: bill.discountPct ?? 0,
         });
 
-        setGstRate(bill.gstRate ?? 0.18);
+        setGstRate(bill.gstRate ?? 0.0);
         setInterState(Boolean(bill.isInterState));
         setPaymentMode(bill.paymentMode ?? "CASH");
         setSplit(bill.split ?? {});
         setNotes(bill.notes ?? "");
 
-        // invoice date (keep LOCAL day)
         try {
           const rawDate: string =
             bill.billDate || bill.finalizedAt || bill.createdAt || new Date().toISOString();
@@ -485,15 +491,17 @@ export default function BillingPage() {
       const ix = prev.findIndex((l) => l.itemId === it.id && ((l.variant ?? "").trim() === v));
 
       if (ix === -1) {
+        const qty = 1;
+        const rate = Number(it.price) || 0;
         return [
           ...prev,
           {
             itemId: it.id,
             name: it.name,
             variant: it.variant,
-            qty: 1,
-            rate: it.price,
-            amount: it.price,
+            qty,
+            rate,
+            amount: calcLineAmount(rate, qty),
           },
         ];
       }
@@ -507,7 +515,7 @@ export default function BillingPage() {
         ...line,
         qty: nextQty,
         rate,
-        amount: rate * nextQty,
+        amount: calcLineAmount(rate, nextQty),
       };
 
       return next;
@@ -523,7 +531,13 @@ export default function BillingPage() {
   }
 
   function onQty(ix: number, q: number) {
-    setLines((p) => p.map((l, i) => (i === ix ? { ...l, qty: q, amount: l.rate * q } : l)));
+    setLines((p) =>
+      p.map((l, i) =>
+        i === ix
+          ? { ...l, qty: q, amount: calcLineAmount(Number(l.rate || 0), q) }
+          : l
+      )
+    );
   }
 
   function onRemove(ix: number) {
@@ -561,12 +575,20 @@ export default function BillingPage() {
     [lines, discount, gstRate, interState]
   );
 
-  const subtotal = useMemo(() => lines.reduce((s, l) => s + l.rate * l.qty, 0), [lines]);
+  // Use totals.subtotal (consistent with computeTotals, avoids float drift)
+  const subtotal = totals.subtotal;
 
-  const discountTooHigh = discount.flat + subtotal * (discount.pct / 100) > subtotal + 0.001;
+  // Discount validation in paise (no float compare)
+  const subtotalPaise = toPaise(subtotal);
+  const desiredDiscountPaise = toPaise(discount.flat || 0) + pctOfPaise(subtotalPaise, discount.pct || 0);
+  const discountTooHigh = desiredDiscountPaise > subtotalPaise;
 
-  const splitSum = (split.cash || 0) + (split.card || 0) + (split.upi || 0);
-  const splitMismatch = paymentMode === "SPLIT" && Math.round(splitSum) !== Math.round(totals.grandTotal);
+  // Split validation in paise
+  const expectedPaise = toPaise(totals.grandTotal);
+  const splitSumPaise =
+    toPaise(split.cash || 0) + toPaise(split.card || 0) + toPaise(split.upi || 0);
+
+  const splitMismatch = paymentMode === "SPLIT" && splitSumPaise !== expectedPaise;
 
   const customerValid = customer.name.trim().length > 0 && customer.phone.trim().length > 0;
   const needsItems = lines.length === 0;
@@ -586,22 +608,17 @@ export default function BillingPage() {
     split,
     notes,
     totals,
-    // local day -> ISO at local midnight (stable)
     billDate: invoiceDate ? new Date(`${invoiceDate}T00:00:00`).toISOString() : undefined,
   };
 
   return (
-    // pb for mobile bottom-nav space
     <div className="min-w-0 space-y-5 pb-24 lg:space-y-6 lg:pb-0">
       <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)]">
-        {/* LEFT COLUMN */}
         <div className="min-w-0 space-y-4">
-          {/* Invoice date */}
           <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <InvoiceDatePicker value={invoiceDate} onChange={setInvoiceDate} />
           </section>
 
-          {/* Customer details */}
           <section className="min-w-0">
             <div className="mt-3">
               <CustomerCard
@@ -617,7 +634,6 @@ export default function BillingPage() {
             </div>
           </section>
 
-          {/* Items */}
           <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -646,7 +662,6 @@ export default function BillingPage() {
             </div>
           </section>
 
-          {/* Discount + Tax + Notes */}
           <section className="min-w-0">
             <div className="mt-3">
               <ExtrasCard
@@ -663,7 +678,6 @@ export default function BillingPage() {
           </section>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="min-w-0 space-y-4">
           <TotalsCard totals={totals} interState={interState} onInterState={setInterState} />
 

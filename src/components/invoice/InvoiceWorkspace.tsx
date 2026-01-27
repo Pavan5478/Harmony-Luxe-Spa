@@ -1,4 +1,3 @@
-// src/components/invoice/InvoiceWorkspace.tsx
 "use client";
 
 import Link from "next/link";
@@ -10,6 +9,9 @@ type Status = "DRAFT" | "FINAL" | "VOID";
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+const LS_MODE = "bb.invoicePreview.mode"; // "fit" | "custom"
+const LS_SCALE = "bb.invoicePreview.scale"; // number (0.28..1.5)
 
 export default function InvoiceWorkspace({
   children,
@@ -25,7 +27,7 @@ export default function InvoiceWorkspace({
   children: React.ReactNode;
   idOrNo: string;
   printedAt: string | null;
-  printedAtLabel?: string | null; // ✅ FIX for TS error
+  printedAtLabel?: string | null;
   status: Status;
   autoPrint?: boolean;
   backHref: string;
@@ -38,6 +40,33 @@ export default function InvoiceWorkspace({
   const [fitScale, setFitScale] = useState(1);
   const [scale, setScale] = useState(1);
   const [mode, setMode] = useState<"fit" | "custom">("fit");
+
+  // Restore zoom preference
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem(LS_MODE);
+      const sRaw = localStorage.getItem(LS_SCALE);
+      const s = sRaw ? Number(sRaw) : NaN;
+
+      if (m === "custom" && Number.isFinite(s)) {
+        setMode("custom");
+        setScale(clamp(s, 0.28, 1.5));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist zoom preference
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_MODE, mode);
+      if (mode === "custom") localStorage.setItem(LS_SCALE, String(scale));
+      if (mode === "fit") localStorage.removeItem(LS_SCALE);
+    } catch {
+      // ignore
+    }
+  }, [mode, scale]);
 
   const statusUI = useMemo(() => {
     const base =
@@ -66,7 +95,7 @@ export default function InvoiceWorkspace({
     const calc = () => {
       const fw = frame.clientWidth;
       const fh = frame.clientHeight;
-      const pw = paper.offsetWidth; // untransformed size
+      const pw = paper.offsetWidth; // not affected by transform
       const ph = paper.offsetHeight;
 
       if (!fw || !fh || !pw || !ph) return;
@@ -106,13 +135,13 @@ export default function InvoiceWorkspace({
   const printedLabel =
     printedAtLabel ?? (printedAt ? new Date(printedAt).toLocaleString() : null);
 
+  const backLabel = backHref.startsWith("/billing") ? "← Back to billing" : "← Back to invoices";
+
   return (
     <div className="invoice-workspace-root mx-auto w-full max-w-7xl print:max-w-none">
-      {/* ✅ PRINT ONLY: render only paper */}
+      {/* PRINT ONLY: render only paper */}
       <div className="hidden print:block">
-        <div className="mx-auto w-full max-w-[210mm]">
-          {children}
-        </div>
+        <div className="mx-auto w-full max-w-[210mm]">{children}</div>
       </div>
 
       {/* SCREEN MODE */}
@@ -124,7 +153,7 @@ export default function InvoiceWorkspace({
               <div className="flex h-full w-full justify-center">
                 <div
                   ref={paperRef}
-                  className="invoice-scale origin-top transform-gpu bg-white shadow-sm ring-1 ring-slate-200"
+                  className="invoice-scale origin-top transform-gpu bg-white shadow-sm ring-1 ring-border/70"
                   style={{
                     transform: `scale(${scale})`,
                     transformOrigin: "top center",
@@ -157,11 +186,13 @@ export default function InvoiceWorkspace({
               </span>
             </div>
 
-            {/* Better UX zoom */}
+            {/* Zoom */}
             <div className="rounded-xl border border-border bg-background/60 p-3">
               <div className="flex items-center justify-between">
                 <div className="text-[11px] font-semibold text-foreground">Preview</div>
-                <div className="text-[11px] text-muted">{pct}%</div>
+                <div className="text-[11px] text-muted">
+                  {pct}% {mode === "fit" ? "• Fit" : "• Custom"}
+                </div>
               </div>
 
               <input
@@ -169,8 +200,10 @@ export default function InvoiceWorkspace({
                 type="range"
                 min={28}
                 max={150}
+                step={1}
                 value={pct}
                 onChange={(e) => setCustom(Number(e.target.value) / 100)}
+                aria-label="Invoice preview zoom"
               />
 
               <div className="mt-2 flex flex-wrap gap-2">
@@ -222,7 +255,7 @@ export default function InvoiceWorkspace({
               href={backHref}
               className="inline-flex w-full items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-card hover:no-underline"
             >
-              ← Back to invoices
+              {backLabel}
             </Link>
           </div>
         </aside>

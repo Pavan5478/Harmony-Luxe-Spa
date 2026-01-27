@@ -32,7 +32,11 @@ export interface BillLine {
 }
 
 export type PaymentMode = "CASH" | "CARD" | "UPI" | "SPLIT";
-export interface PaymentSplit { cash?: number; card?: number; upi?: number; }
+export interface PaymentSplit {
+  cash?: number;
+  card?: number;
+  upi?: number;
+}
 
 // exported Customer types
 export type Customer = { name: string; phone: string; email: string };

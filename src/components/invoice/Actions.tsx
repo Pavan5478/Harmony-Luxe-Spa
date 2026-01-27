@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "DRAFT" | "FINAL" | "VOID";
 
@@ -13,6 +13,7 @@ type Props = {
 };
 
 type Loading = null | "PRINT" | "FINALIZE" | "EDIT";
+type Tone = "info" | "success" | "error";
 
 function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -23,8 +24,22 @@ function Spinner({ className = "" }: { className?: string }) {
       className={`animate-spin ${className}`}
       aria-hidden
     >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.25" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
+        opacity="0.25"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        fill="none"
+      />
     </svg>
   );
 }
@@ -35,8 +50,11 @@ function safe(p: Promise<any>) {
 
 export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }: Props) {
   const router = useRouter();
+
   const [loading, setLoading] = useState<Loading>(null);
+  const [tone, setTone] = useState<Tone>("info");
   const [msg, setMsg] = useState<string | null>(null);
+
   const autoOnce = useRef(false);
 
   const isDraft = status === "DRAFT";
@@ -44,14 +62,23 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
   const isVoid = status === "VOID";
   const busy = loading !== null;
 
-  function markPrintedOnServer(key: string) {
-    return fetch(`/api/bills/${encodeURIComponent(key)}`, {
+  const bannerCls = useMemo(() => {
+    if (!msg) return "";
+    if (tone === "error") return "border-danger/30 bg-danger/10 text-danger";
+    if (tone === "success") return "border-emerald-500/25 bg-emerald-500/10 text-emerald-200";
+    return "border-border/60 bg-background/60 text-muted";
+  }, [msg, tone]);
+
+  async function markPrintedOnServer(key: string) {
+    const res = await fetch(`/api/bills/${encodeURIComponent(key)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ markPrinted: true }),
       cache: "no-store",
       keepalive: true,
     });
+    if (!res.ok) throw new Error(await res.text());
+    return res;
   }
 
   function doPrint(title: string, after?: () => void) {
@@ -66,33 +93,40 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
       after?.();
     };
 
+    // afterprint fires in most browsers, but not 100% reliably
     window.addEventListener("afterprint", finish, { once: true });
-    window.setTimeout(finish, 60_000);
+
+    // longer fallback: users may keep print dialog open
+    window.setTimeout(finish, 180_000);
+
     window.print();
   }
 
-  async function handlePrint() {
+  async function handlePrint(kind: "print" | "pdf" = "print") {
     if (busy || isVoid) return;
 
     setLoading("PRINT");
-    setMsg("Opening print…");
+    setTone("info");
+    setMsg(kind === "pdf" ? "Opening save as PDF…" : "Opening print…");
 
-    // Create a safe filename for the PDF by replacing any characters that are not
-    // alphanumeric, dash, underscore or dot. Browsers use the document.title
-    // to suggest a filename when printing to PDF.
     const safeId = idOrNo.replace(/[^a-zA-Z0-9\-_\.]+/g, "-");
     const title = `Invoice-${safeId}`;
 
     const after = () => {
-      if (!printedAt) safe(markPrintedOnServer(idOrNo));
-      safe(
-        Promise.resolve()
-          .then(() => router.refresh())
-          .finally(() => {
-            setLoading(null);
-            setMsg(null);
-          })
-      );
+      // mark printed only once (when previously not marked)
+      if (!printedAt) {
+        safe(
+          markPrintedOnServer(idOrNo)
+            .then(() => router.refresh())
+            .catch((e) => console.error("markPrinted failed", e))
+        );
+      } else {
+        safe(Promise.resolve().then(() => router.refresh()));
+      }
+
+      // clear UI state
+      setLoading(null);
+      setMsg(null);
     };
 
     requestAnimationFrame(() => doPrint(title, after));
@@ -101,6 +135,7 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
   function handleEditDraft() {
     if (!isDraft || busy) return;
     setLoading("EDIT");
+    setTone("info");
     setMsg("Opening draft…");
     router.push(`/billing?edit=${encodeURIComponent(idOrNo)}`);
   }
@@ -109,10 +144,11 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
     if (!isDraft || busy) return;
 
     setLoading("FINALIZE");
+    setTone("info");
     setMsg("Finalizing…");
 
     try {
-      const email = localStorage.getItem("bb.email") || "cashier@harmoneyluxe.com";
+      const email = localStorage.getItem("bb.email") || "cashier@harmonyluxe.com";
 
       const res = await fetch(`/api/bills/${encodeURIComponent(idOrNo)}`, {
         method: "PATCH",
@@ -126,38 +162,39 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
       const data = await res.json();
       const billNo: string = data?.bill?.billNo || data?.bill?.id || idOrNo;
 
-      // Create a safe filename for the PDF by replacing any characters that are not
-      // alphanumeric, dash, underscore or dot. Use the finalized bill number (or id)
-      // as part of the document title so the exported PDF is meaningful.
       const safeBillNo = String(billNo).replace(/[^a-zA-Z0-9\-_\.]+/g, "-");
       const title = `Invoice-${safeBillNo}`;
+
+      setTone("success");
+      setMsg("Invoice finalized. Opening print…");
+
       const after = () => {
-        safe(markPrintedOnServer(billNo));
-        router.replace(`/invoices/${encodeURIComponent(billNo)}?from=billing`);
+        // mark printed on finalized invoice number
         safe(
-          Promise.resolve()
+          markPrintedOnServer(billNo)
             .then(() => router.refresh())
-            .finally(() => {
-              setLoading(null);
-              setMsg(null);
-            })
+            .catch((e) => console.error("markPrinted failed", e))
         );
+
+        router.replace(`/invoices/${encodeURIComponent(billNo)}?from=billing`);
+
+        setLoading(null);
+        setMsg(null);
       };
 
-      setMsg("Opening print…");
       requestAnimationFrame(() => doPrint(title, after));
     } catch (e) {
       console.error(e);
-      alert("Failed to finalize this invoice. Please try again.");
+      setTone("error");
+      setMsg("Failed to finalize this invoice. Check connection and try again.");
       setLoading(null);
-      setMsg(null);
     }
   }
 
   useEffect(() => {
     if (!autoPrint || !isFinal || autoOnce.current) return;
     autoOnce.current = true;
-    handlePrint();
+    handlePrint("print");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPrint, isFinal]);
 
@@ -192,7 +229,7 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
           <>
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={() => handlePrint("print")}
               disabled={busy}
               className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
@@ -202,9 +239,10 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
 
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={() => handlePrint("pdf")}
               disabled={busy}
               className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground hover:bg-card disabled:opacity-60"
+              title="Use the print dialog and choose “Save as PDF”"
             >
               Save as PDF
             </button>
@@ -212,7 +250,15 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
         )}
       </div>
 
-      {msg ? <div className="text-[11px] text-muted">{msg}</div> : null}
+      {msg ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`rounded-xl border px-3 py-2 text-[11px] leading-relaxed ${bannerCls}`}
+        >
+          {msg}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -62,6 +62,10 @@ export async function readRows(range: string) {
 const INVOICE_SHEET = "Invoices";
 const INDEX_SHEET = "InvoiceIndex";
 
+// ---------- Bill counter (fast BillNo allocation; avoids scanning entire Invoices column) ----------
+// Columns: A FY, B NextSeq, C UpdatedAt
+const BILL_COUNTER_SHEET = "BillCounter";
+
 // ---------- Customers index ----------
 const CUSTOMER_SHEET = "Customers";
 const CUSTOMER_INDEX_SHEET = "CustomerIndex";
@@ -76,6 +80,10 @@ const INVOICE_RANGE_ALL = a1(INVOICE_SHEET, "A2:X");
 const INDEX_RANGE_ALL = a1(INDEX_SHEET, "A2:C");
 const INDEX_APPEND_RANGE = a1(INDEX_SHEET, "A2:C");
 const INDEX_HEADER_RANGE = a1(INDEX_SHEET, "A1:C1");
+
+const BILL_COUNTER_RANGE_ALL = a1(BILL_COUNTER_SHEET, "A2:C");
+const BILL_COUNTER_APPEND_RANGE = a1(BILL_COUNTER_SHEET, "A2:C");
+const BILL_COUNTER_HEADER_RANGE = a1(BILL_COUNTER_SHEET, "A1:C1");
 
 // Customers: A..L
 // A Key
@@ -100,7 +108,20 @@ const CUSTOMER_INDEX_HEADER_RANGE = a1(CUSTOMER_INDEX_SHEET, "A1:C1");
 
 let _indexReady: Promise<void> | null = null;
 
+// Cache index rows in-memory to avoid multiple round-trips in the same request.
+// (Next.js server functions often call getInvoiceRowNumberFromIndex + upsertIndex back-to-back.)
+const INDEX_CACHE_MS = 30_000;
+let _indexRowsCache: { rows: any[][]; ts: number } | null = null;
+
+let _billCounterReady: Promise<void> | null = null;
+
+const BILL_COUNTER_CACHE_MS = 60_000;
+let _billCounterCache: { rows: any[][]; ts: number } | null = null;
+
 let _customerSheetsReady: Promise<void> | null = null;
+
+const CUSTOMER_INDEX_CACHE_MS = 30_000;
+let _customerIndexRowsCache: { rows: any[][]; ts: number } | null = null;
 
 async function ensureIndexSheet() {
   if (_indexReady) return _indexReady;
@@ -134,6 +155,9 @@ async function ensureIndexSheet() {
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [["Key", "Row", "UpdatedAt"]] },
     });
+
+    // Schema/headers are now ensured; cached index rows (if any) might be stale.
+    _indexRowsCache = null;
   })();
 
   return _indexReady;
@@ -203,9 +227,48 @@ async function ensureCustomerSheets() {
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [["Key", "Row", "UpdatedAt"]] },
     });
+
+    _customerIndexRowsCache = null;
   })();
 
   return _customerSheetsReady;
+}
+
+async function ensureBillCounterSheet() {
+  if (_billCounterReady) return _billCounterReady;
+
+  _billCounterReady = (async () => {
+    const { sheets, spreadsheetId } = getSheetsClient();
+
+    const meta = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: "sheets(properties(sheetId,title))",
+    });
+
+    const exists = (meta.data.sheets || []).some(
+      (s) => s.properties?.title === BILL_COUNTER_SHEET
+    );
+
+    if (!exists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{ addSheet: { properties: { title: BILL_COUNTER_SHEET } } }],
+        },
+      });
+    }
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: BILL_COUNTER_HEADER_RANGE,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [["FY", "NextSeq", "UpdatedAt"]] },
+    });
+
+    _billCounterCache = null;
+  })();
+
+  return _billCounterReady;
 }
 
 function parseRowNumberFromA1Range(a1Range: string | undefined | null): number | null {
@@ -218,20 +281,140 @@ function parseRowNumberFromA1Range(a1Range: string | undefined | null): number |
 
 async function safeReadIndexRows(): Promise<any[][]> {
   await ensureIndexSheet();
+  const now = Date.now();
+  if (_indexRowsCache && now - _indexRowsCache.ts < INDEX_CACHE_MS) {
+    return _indexRowsCache.rows;
+  }
   try {
-    return await readRows(INDEX_RANGE_ALL);
+    const rows = await readRows(INDEX_RANGE_ALL);
+    _indexRowsCache = { rows, ts: now };
+    return rows;
   } catch {
-    return [];
+    return _indexRowsCache?.rows || [];
   }
 }
 
 async function safeReadCustomerIndexRows(): Promise<any[][]> {
   await ensureCustomerSheets();
-  try {
-    return await readRows(CUSTOMER_INDEX_RANGE_ALL);
-  } catch {
-    return [];
+  const now = Date.now();
+  if (_customerIndexRowsCache && now - _customerIndexRowsCache.ts < CUSTOMER_INDEX_CACHE_MS) {
+    return _customerIndexRowsCache.rows;
   }
+  try {
+    const rows = await readRows(CUSTOMER_INDEX_RANGE_ALL);
+    _customerIndexRowsCache = { rows, ts: now };
+    return rows;
+  } catch {
+    return _customerIndexRowsCache?.rows || [];
+  }
+}
+
+async function safeReadBillCounterRows(): Promise<any[][]> {
+  await ensureBillCounterSheet();
+  const now = Date.now();
+  if (_billCounterCache && now - _billCounterCache.ts < BILL_COUNTER_CACHE_MS) {
+    return _billCounterCache.rows;
+  }
+  try {
+    const rows = await readRows(BILL_COUNTER_RANGE_ALL);
+    _billCounterCache = { rows, ts: now };
+    return rows;
+  } catch {
+    return _billCounterCache?.rows || [];
+  }
+}
+
+function parseBillSeqForFY(billNo: string, fy: string): number {
+  const b = String(billNo || "").trim();
+  const prefix = `${String(fy || "").trim()}/`;
+  if (!b || !prefix || !b.startsWith(prefix)) return 0;
+  const tail = b.slice(prefix.length);
+  const n = parseInt(tail, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+async function computeMaxBillSeqForFY(fy: string): Promise<number> {
+  const f = String(fy || "").trim();
+  if (!f) return 0;
+  // One-time slow path (migration only): scan billNo column to find max for FY.
+  // We intentionally read only column A.
+  const rows = await readRows(a1(INVOICE_SHEET, "A2:A"));
+  let max = 0;
+  for (const r of rows) {
+    const seq = parseBillSeqForFY(String(r?.[0] ?? ""), f);
+    if (seq > max) max = seq;
+  }
+  return max;
+}
+
+/**
+ * Allocate the next sequence number for a financial year.
+ * Stores the *next* sequence in BillCounter!B (so this call increments it).
+ */
+export async function allocateNextBillSeq(fy: string): Promise<number> {
+  const f = String(fy || "").trim();
+  if (!f) throw new Error("FY missing");
+
+  await ensureBillCounterSheet();
+  const rows = await safeReadBillCounterRows();
+
+  const { sheets, spreadsheetId } = getSheetsClient();
+  const now = new Date().toISOString();
+
+  // find row for FY
+  let foundIx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i]?.[0] ?? "").trim() === f) {
+      foundIx = i;
+      break;
+    }
+  }
+
+  if (foundIx === -1) {
+    // First time for FY: compute current max once (slow) and initialize.
+    const max = await computeMaxBillSeqForFY(f);
+    const allocate = Math.max(1, max + 1);
+    const nextSeq = allocate + 1;
+
+    const appended = await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: BILL_COUNTER_APPEND_RANGE,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [[f, nextSeq, now]] },
+    });
+
+    // Update cache (best-effort)
+    const rn = parseRowNumberFromA1Range(appended.data.updates?.updatedRange);
+    if (rn && _billCounterCache) {
+      _billCounterCache.rows.push([f, nextSeq, now]);
+      _billCounterCache.ts = Date.now();
+    } else {
+      _billCounterCache = null;
+    }
+
+    return allocate;
+  }
+
+  const row = rows[foundIx] || [];
+  const allocate = Math.max(1, Number(row[1] ?? 1) || 1);
+  const nextSeq = allocate + 1;
+  const rowNumber = foundIx + 2; // + header
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: a1(BILL_COUNTER_SHEET, `A${rowNumber}:C${rowNumber}`),
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[f, nextSeq, now]] },
+  });
+
+  // Update cache
+  if (_billCounterCache) {
+    _billCounterCache.rows[foundIx] = [f, nextSeq, now];
+    _billCounterCache.ts = Date.now();
+  }
+
+  return allocate;
 }
 
 async function getInvoiceRowNumberFromIndex(key: string): Promise<number | null> {
@@ -292,6 +475,15 @@ async function upsertIndex(key: string, invoiceRowNumber: number) {
       insertDataOption: "INSERT_ROWS",
       requestBody: { values: [[k, invoiceRowNumber, now]] },
     });
+
+    // Update cache (best-effort)
+    if (_indexRowsCache) {
+      _indexRowsCache.rows.push([k, invoiceRowNumber, now]);
+      _indexRowsCache.ts = Date.now();
+    } else {
+      // We don't know if there was a cached state; safest to invalidate.
+      _indexRowsCache = null;
+    }
   } else {
     // Update existing row
     const rowNumber = foundIx + 2; // + header
@@ -301,6 +493,11 @@ async function upsertIndex(key: string, invoiceRowNumber: number) {
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[k, invoiceRowNumber, now]] },
     });
+
+    if (_indexRowsCache) {
+      _indexRowsCache.rows[foundIx] = [k, invoiceRowNumber, now];
+      _indexRowsCache.ts = Date.now();
+    }
   }
 }
 
@@ -330,6 +527,13 @@ async function upsertCustomerIndex(key: string, customerRowNumber: number) {
       insertDataOption: "INSERT_ROWS",
       requestBody: { values: [[k, customerRowNumber, now]] },
     });
+
+    if (_customerIndexRowsCache) {
+      _customerIndexRowsCache.rows.push([k, customerRowNumber, now]);
+      _customerIndexRowsCache.ts = Date.now();
+    } else {
+      _customerIndexRowsCache = null;
+    }
   } else {
     const rowNumber = foundIx + 2;
     await sheets.spreadsheets.values.update({
@@ -338,6 +542,11 @@ async function upsertCustomerIndex(key: string, customerRowNumber: number) {
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[k, customerRowNumber, now]] },
     });
+
+    if (_customerIndexRowsCache) {
+      _customerIndexRowsCache.rows[foundIx] = [k, customerRowNumber, now];
+      _customerIndexRowsCache.ts = Date.now();
+    }
   }
 }
 
@@ -366,6 +575,8 @@ async function deleteIndexKeys(keys: string[]) {
       requestBody: { values: filtered },
     });
   }
+
+  _indexRowsCache = { rows: filtered, ts: Date.now() };
 }
 
 async function shiftIndexRowsAfter(deletedInvoiceRow: number) {
@@ -402,6 +613,8 @@ async function shiftIndexRowsAfter(deletedInvoiceRow: number) {
     valueInputOption: "USER_ENTERED",
     requestBody: { values: next },
   });
+
+  _indexRowsCache = { rows: next, ts: Date.now() };
 }
 
 // ---------- customer helpers ----------
@@ -600,7 +813,8 @@ async function applyCustomerDelta(
  */
 async function upsertInvoiceRow(
   bill: any,
-  invRow: any[]
+  invRow: any[],
+  opts?: { assumeNew?: boolean }
 ): Promise<{ rowNumber: number | null; prevRow: any[] | null; existed: boolean }> {
   const { sheets, spreadsheetId } = getSheetsClient();
   const draftId = String(bill.id ?? "").trim();
@@ -638,6 +852,25 @@ async function upsertInvoiceRow(
     if (draftId) await upsertIndex(draftId, rowNumber);
     if (billNo) await upsertIndex(billNo, rowNumber);
     return { rowNumber, prevRow, existed: !!prevRow };
+  }
+
+  // If caller knows this is a brand-new invoice (e.g. freshly created DraftId),
+  // skip the expensive full-sheet scan and just append.
+  if (opts?.assumeNew) {
+    const appended = await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: INVOICE_RANGE_ALL,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [invRow] },
+    });
+
+    const rn = parseRowNumberFromA1Range(appended.data.updates?.updatedRange);
+    if (rn) {
+      if (draftId) await upsertIndex(draftId, rn);
+      if (billNo) await upsertIndex(billNo, rn);
+    }
+    return { rowNumber: rn, prevRow: null, existed: false };
   }
 
   // 3) FALLBACK: scan entire invoice sheet (slow, but only if index is missing)
@@ -698,7 +931,17 @@ async function upsertInvoiceRow(
  *
  * Supports bill.billDate (manual invoice date).
  */
-export async function saveInvoiceToSheets(bill: any) {
+export async function saveInvoiceToSheets(
+  bill: any,
+  opts?: {
+    // Skip the expensive full-sheet scan when you know this invoice does not exist yet.
+    assumeNew?: boolean;
+    // Customer list/index maintenance can be skipped for speed.
+    skipCustomerDelta?: boolean;
+    // Fire-and-forget customer delta (faster response, but may not complete on serverless runtimes).
+    backgroundCustomerDelta?: boolean;
+  }
+) {
   const t = bill.totals || {};
   const tax = (t.igst || 0) + (t.cgst || 0) + (t.sgst || 0);
   const gstPct = t.taxableBase > 0 ? +((tax / t.taxableBase) * 100).toFixed(2) : 0;
@@ -759,12 +1002,21 @@ export async function saveInvoiceToSheets(bill: any) {
     rawJson, // X RawJson
   ];
 
-  const { prevRow, existed } = await upsertInvoiceRow(bill, invRow);
+  const { prevRow, existed } = await upsertInvoiceRow(bill, invRow, opts);
 
-  // Update customer index (fast customer list)
+  // Update customer index (best-effort)
   try {
-    const prev = invoiceRowMeta(prevRow);
-    const next = invoiceRowMeta(invRow);
+    if (!opts?.skipCustomerDelta) {
+      const doApply = async (key: string, patch: any) => {
+        if (opts?.backgroundCustomerDelta) {
+          void applyCustomerDelta(key, patch);
+          return;
+        }
+        await applyCustomerDelta(key, patch);
+      };
+
+      const prev = invoiceRowMeta(prevRow);
+      const next = invoiceRowMeta(invRow);
 
     const oldKey = prev?.key || null;
     const newKey = next?.key || null;
@@ -792,7 +1044,7 @@ export async function saveInvoiceToSheets(bill: any) {
       // New invoice row
       if (newKey) {
         const sd = statusDelta(newStatus, +1);
-        await applyCustomerDelta(newKey, {
+        await doApply(newKey, {
           name: next?.name,
           phone: next?.phone,
           email: next?.email,
@@ -810,7 +1062,7 @@ export async function saveInvoiceToSheets(bill: any) {
       if (oldKey && newKey && oldKey !== newKey) {
         // Move invoice between customers
         const sdOld = statusDelta(oldStatus, -1);
-        await applyCustomerDelta(oldKey, {
+        await doApply(oldKey, {
           deltaInvoices: -1,
           deltaFinal: sdOld.df,
           deltaDraft: sdOld.dd,
@@ -819,7 +1071,7 @@ export async function saveInvoiceToSheets(bill: any) {
         });
 
         const sdNew = statusDelta(newStatus, +1);
-        await applyCustomerDelta(newKey, {
+        await doApply(newKey, {
           name: next?.name,
           phone: next?.phone,
           email: next?.email,
@@ -847,7 +1099,7 @@ export async function saveInvoiceToSheets(bill: any) {
             dVoid = minus.dv + plus.dv;
           }
 
-          await applyCustomerDelta(targetKey, {
+          await doApply(targetKey, {
             name: next?.name,
             phone: next?.phone,
             email: next?.email,
@@ -860,6 +1112,7 @@ export async function saveInvoiceToSheets(bill: any) {
           });
         }
       }
+    }
     }
   } catch {
     // Customer index is best-effort; don't block invoice saves.
@@ -885,8 +1138,11 @@ export async function saveInvoiceToSheets(bill: any) {
 }
 
 /** Convenience wrapper – use this everywhere from store/bills.ts */
-export async function saveBillToSheet(bill: any) {
-  return saveInvoiceToSheets(bill);
+export async function saveBillToSheet(
+  bill: any,
+  opts?: Parameters<typeof saveInvoiceToSheets>[1]
+) {
+  return saveInvoiceToSheets(bill, opts);
 }
 
 /**

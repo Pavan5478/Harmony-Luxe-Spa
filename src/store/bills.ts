@@ -11,6 +11,8 @@ type AnyBill = BillDraft | BillFinal;
 
 // ─────────────────────────────
 // Cache (list + single)
+// NOTE: in-memory cache can be stale across server instances.
+// We keep it small + allow bypass for mutations.
 // ─────────────────────────────
 const LIST_CACHE_MS = 20_000;
 let listCache: { data: AnyBill[]; ts: number } | null = null;
@@ -50,18 +52,26 @@ export async function listBills(status?: "DRAFT" | "FINAL" | "VOID"): Promise<An
   return all.filter((b: any) => b.status === status);
 }
 
-export async function getBill(idOrNo: string): Promise<AnyBill | undefined> {
+export async function getBill(
+  idOrNo: string,
+  opts?: { bypassCache?: boolean }
+): Promise<AnyBill | undefined> {
   const k = String(idOrNo || "").trim();
   if (!k) return undefined;
 
+  const bypassCache = !!opts?.bypassCache;
+
   const now = Date.now();
-  const cached = singleCache.get(k);
-  if (cached && now - cached.ts < SINGLE_CACHE_MS) return cached.bill;
+  if (!bypassCache) {
+    const cached = singleCache.get(k);
+    if (cached && now - cached.ts < SINGLE_CACHE_MS) return cached.bill;
+  }
 
   // FAST: 1-row fetch via InvoiceIndex
   const b = (await loadBillFromSheetByKey(k)) as AnyBill | undefined;
   if (!b) return undefined;
 
+  // refresh caches
   singleCache.set(k, { bill: b, ts: now });
   const id = String((b as any).id || "").trim();
   const billNo = String((b as any).billNo || "").trim();
@@ -84,17 +94,48 @@ export async function createDraft(
     createdAt: new Date().toISOString(),
   };
 
-  await saveBillToSheet(draft);
+  // New drafts are always new rows -> skip full-sheet scan for speed.
+  await saveBillToSheet(draft, { assumeNew: true, skipCustomerDelta: true });
   invalidateCache();
   return draft;
 }
 
+// Create and immediately finalize a brand-new bill (single Sheets write).
+// Used by the UI's "Generate/Finalize" button when user isn't editing an existing draft.
+export async function createFinal(
+  data: Omit<BillFinal, "id" | "billNo" | "status" | "createdAt" | "finalizedAt" | "cashierEmail">,
+  cashierEmail: string
+): Promise<BillFinal> {
+  const id = newDraftId();
+  const billNo = await nextBillNo();
+  const now = new Date().toISOString();
+
+  const fin: BillFinal = {
+    ...(data as any),
+    id,
+    status: "FINAL",
+    billNo,
+    cashierEmail,
+    createdAt: now,
+    finalizedAt: now,
+  };
+
+  await saveBillToSheet(fin, { assumeNew: true, backgroundCustomerDelta: true });
+  invalidateCache();
+  return fin;
+}
+
 // Finalize draft -> FINAL bill (adds BillNo, finalizedAt, cashierEmail)
 export async function finalizeDraft(id: string, cashierEmail: string): Promise<BillFinal> {
-  const existing = await getBill(id);
+  // ✅ always fresh read for mutation
+  const existing = await getBill(id, { bypassCache: true });
   const base = existing as any;
 
-  if (!base || base.status !== "DRAFT" || String(base.id || "").trim() !== String(id || "").trim()) {
+  if (
+    !base ||
+    base.status !== "DRAFT" ||
+    String(base.id || "").trim() !== String(id || "").trim()
+  ) {
     throw new Error("Draft not found");
   }
 
@@ -108,7 +149,7 @@ export async function finalizeDraft(id: string, cashierEmail: string): Promise<B
     finalizedAt: new Date().toISOString(),
   };
 
-  await saveBillToSheet(fin);
+  await saveBillToSheet(fin, { backgroundCustomerDelta: true });
   invalidateCache();
   return fin;
 }
@@ -118,7 +159,8 @@ export async function updateBill(
   idOrNo: string,
   patch: Partial<BillFinal | BillDraft>
 ): Promise<AnyBill> {
-  const existing = await getBill(idOrNo);
+  // ✅ always fresh read for mutation
+  const existing = await getBill(idOrNo, { bypassCache: true });
   if (!existing) throw new Error("Bill not found");
 
   const original = existing as any;
@@ -142,11 +184,20 @@ export async function updateBill(
 
 // Mark as printed (by id or billNo)
 export async function markPrinted(idOrNo: string): Promise<AnyBill> {
-  const existing = await getBill(idOrNo);
+  // ✅ always fresh read for mutation
+  const existing = await getBill(idOrNo, { bypassCache: true });
   if (!existing) throw new Error("Bill not found");
 
+  const e: any = existing;
+
+  // don't mark VOID invoices as printed
+  if (e.status === "VOID") return existing;
+
+  // ✅ keep first printedAt (don’t overwrite)
+  if (e.printedAt) return existing;
+
   const updated: any = {
-    ...(existing as any),
+    ...e,
     printedAt: new Date().toISOString(),
   };
 
@@ -157,11 +208,17 @@ export async function markPrinted(idOrNo: string): Promise<AnyBill> {
 
 // Soft delete: mark VOID in sheet.
 export async function voidBill(idOrNo: string): Promise<AnyBill> {
-  const existing = await getBill(idOrNo);
+  // ✅ always fresh read for mutation
+  const existing = await getBill(idOrNo, { bypassCache: true });
   if (!existing) throw new Error("Bill not found");
 
+  const e: any = existing;
+
+  // if already void, keep
+  if (e.status === "VOID") return existing;
+
   const updated: any = {
-    ...(existing as any),
+    ...e,
     status: "VOID",
   };
 

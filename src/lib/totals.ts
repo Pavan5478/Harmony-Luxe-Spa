@@ -4,9 +4,9 @@ import type { BillLine } from "@/types/billing";
 type Args = {
   lines: BillLine[];
   discountFlat: number; // ₹
-  discountPct: number;  // %
-  gstRate: number;      // 0..1  (e.g. 0.18)
-  interState: boolean;  // true => IGST, false => CGST+SGST
+  discountPct: number; // %
+  gstRate: number; // 0..1 (e.g. 0.18)
+  interState: boolean; // true => IGST, false => CGST+SGST
 };
 
 export type BillTotals = {
@@ -20,8 +20,34 @@ export type BillTotals = {
   grandTotal: number;
 };
 
-function r2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+/**
+ * Convert rupees to paise (integer).
+ * We use Math.round here only for the conversion boundary, not for arithmetic.
+ */
+function toPaise(rupees: number): number {
+  const n = Number(rupees) || 0;
+  return Math.round(n * 100);
+}
+
+function fromPaise(paise: number): number {
+  return paise / 100;
+}
+
+/**
+ * Multiply paise by a rate (e.g. 0.18) and round to nearest paise.
+ * This keeps tax math stable and avoids float accumulation.
+ */
+function mulRatePaise(basePaise: number, rate: number): number {
+  const r = Number(rate) || 0;
+  return Math.round(basePaise * r);
+}
+
+/**
+ * Multiply paise by percentage (0..100) and round to nearest paise.
+ */
+function pctOfPaise(basePaise: number, pct: number): number {
+  const p = Number(pct) || 0;
+  return Math.round(basePaise * (p / 100));
 }
 
 export function computeTotals({
@@ -31,52 +57,74 @@ export function computeTotals({
   gstRate,
   interState,
 }: Args): BillTotals {
-  // 1) Subtotal = sum of line amounts (rate * qty)
-  const subtotal = lines.reduce(
-    (sum, l) => sum + (Number(l.rate) || 0) * (Number(l.qty) || 0),
-    0
-  );
+  // 1) Subtotal in paise
+  const subtotalPaise = lines.reduce((sum, l) => {
+    const ratePaise = toPaise(Number(l.rate) || 0);
+    const qty = Number(l.qty) || 0;
 
-  // 2) Discount (flat + percentage on subtotal)
-  let discount = (Number(discountFlat) || 0) +
-    subtotal * ((Number(discountPct) || 0) / 100);
+    // qty may be decimal; handle safely
+    // ratePaise (int) * qty (float) -> round back to paise
+    const linePaise = Math.round(ratePaise * qty);
 
-  if (discount > subtotal) discount = subtotal; // cap
+    return sum + linePaise;
+  }, 0);
 
-  // 3) Taxable base = amount after discount (exclusive of GST)
-  const taxableBase = Math.max(subtotal - discount, 0);
+  // 2) Discount in paise (flat + % of subtotal)
+  const flatDiscountPaise = toPaise(discountFlat);
+  const pctDiscountPaise = pctOfPaise(subtotalPaise, discountPct);
+  let discountPaise = flatDiscountPaise + pctDiscountPaise;
 
-  let cgst = 0;
-  let sgst = 0;
-  let igst = 0;
+  // Cap discount to subtotal, never negative
+  if (discountPaise < 0) discountPaise = 0;
+  if (discountPaise > subtotalPaise) discountPaise = subtotalPaise;
 
-  if (gstRate > 0 && taxableBase > 0) {
+  // 3) Taxable base
+  const taxableBasePaise = Math.max(subtotalPaise - discountPaise, 0);
+
+  // 4) Taxes (each component rounded to paise)
+  let cgstPaise = 0;
+  let sgstPaise = 0;
+  let igstPaise = 0;
+
+  if ((Number(gstRate) || 0) > 0 && taxableBasePaise > 0) {
     if (interState) {
-      // IGST on whole base
-      igst = taxableBase * gstRate;
+      igstPaise = mulRatePaise(taxableBasePaise, gstRate);
     } else {
-      // CGST + SGST split equally
-      const half = gstRate / 2;
-      cgst = taxableBase * half;
-      sgst = taxableBase * half;
+      const half = (Number(gstRate) || 0) / 2;
+      cgstPaise = mulRatePaise(taxableBasePaise, half);
+      sgstPaise = mulRatePaise(taxableBasePaise, half);
+
+      // Safety: ensure CGST+SGST equals total GST after rounding.
+      // This avoids 1 paise mismatch in some edge cases.
+      const totalGstPaise = mulRatePaise(taxableBasePaise, gstRate);
+      const diff = totalGstPaise - (cgstPaise + sgstPaise);
+      if (diff !== 0) {
+        // adjust SGST by diff (could be +1 or -1)
+        sgstPaise += diff;
+      }
     }
   }
 
-  const taxTotal = cgst + sgst + igst;
+  const taxTotalPaise = cgstPaise + sgstPaise + igstPaise;
 
-  // 4) Raw total & round-off
-  const rawTotal = taxableBase + taxTotal;
-  const grandTotal = r2(rawTotal); // keep 2-decimal grand total
-  const roundOff = r2(grandTotal - rawTotal);
+  // 5) Grand total in paise is exact integer math
+  const rawTotalPaise = taxableBasePaise + taxTotalPaise;
+
+  // Keep grandTotal as 2 decimals always; paise already is that.
+  const grandTotalPaise = rawTotalPaise;
+
+  // roundOff: difference between displayed grand total and raw (here it will be 0)
+  // If later you add "round to nearest rupee", update here.
+  const roundOffPaise = grandTotalPaise - rawTotalPaise;
 
   return {
-    subtotal: r2(subtotal),
-    discount: r2(discount),
-    taxableBase: r2(taxableBase),
-    cgst: r2(cgst) || 0,
-    sgst: r2(sgst) || 0,
-    igst: r2(igst) || 0,
-    roundOff,
-    grandTotal,
+    subtotal: fromPaise(subtotalPaise),
+    discount: fromPaise(discountPaise),
+    taxableBase: fromPaise(taxableBasePaise),
+    cgst: fromPaise(cgstPaise) || 0,
+    sgst: fromPaise(sgstPaise) || 0,
+    igst: fromPaise(igstPaise) || 0,
+    roundOff: fromPaise(roundOffPaise),
+    grandTotal: fromPaise(grandTotalPaise),
   };
 }

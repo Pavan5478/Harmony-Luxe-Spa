@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const DEFAULT_GST = 0.05; // 5%
+const DEFAULT_GST = 0.00; // 5%
 
 type Discount = { flat: number; pct: number };
 

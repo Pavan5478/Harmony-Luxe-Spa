@@ -42,9 +42,7 @@ export default function DashboardTopbar({
             href="/billing"
             className={[
               "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm transition",
-              "bg-primary hover:bg-primary/90",
-              // FORCE readable text (prevents it turning white)
-              "!text-[color:var(--on-primary)]",
+              "bg-primary text-primary-foreground hover:bg-primary/90",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
             ].join(" ")}
           >

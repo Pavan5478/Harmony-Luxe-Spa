@@ -435,12 +435,13 @@ export default function InvoicesFiltersBar(props: {
           ) : null}
 
           <Link
-            href="/billing"
-            prefetch={false}
-            className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-          >
-            + New bill
-          </Link>
+  href="/billing"
+  prefetch={false}
+  className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold !text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:!text-slate-900 dark:hover:bg-slate-100"
+>
+  + New bill
+</Link>
+
         </div>
       </div>
 

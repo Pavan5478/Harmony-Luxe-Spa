@@ -13,7 +13,7 @@ export default async function ExpensesPage() {
   const expenses = await listExpenses();
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+    <div className="mx-auto pb-10 pt-4">
       <ExpensesClient initialExpenses={expenses} />
     </div>
   );

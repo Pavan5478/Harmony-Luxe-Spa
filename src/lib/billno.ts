@@ -1,5 +1,5 @@
 ﻿// src/lib/billno.ts
-import { readRows } from "./sheets";
+import { allocateNextBillSeq, readRows } from "./sheets";
 
 /**
  * Compute current financial year string, e.g. "2025-26".
@@ -23,27 +23,32 @@ function getFinancialYear(date = new Date()): string {
  * Example:
  *   2025-26/000123
  *
- * ✅ FAST: reads only Invoices!A2:A (bill numbers column)
+ * ✅ FAST: allocates from BillCounter (no invoice column scan)
  */
 export async function nextBillNo(): Promise<string> {
   const fy = getFinancialYear();
   const prefix = `${fy}/`;
 
-  const colA = await readRows("Invoices!A2:A"); // only bill numbers
-  let maxSeq = 0;
-
-  for (const r of colA) {
-    const billNo = String(r?.[0] || "").trim();
-    if (!billNo.startsWith(prefix)) continue;
-
-    const tail = billNo.slice(prefix.length);
-    const n = parseInt(tail, 10);
-    if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
+  // Fast path: allocate from BillCounter sheet (O(1) read/write).
+  try {
+    const seq = await allocateNextBillSeq(fy);
+    const padded = String(seq).padStart(6, "0");
+    return `${prefix}${padded}`;
+  } catch {
+    // Fallback (migration/edge): scan bill numbers column.
+    const colA = await readRows("Invoices!A2:A");
+    let maxSeq = 0;
+    for (const r of colA) {
+      const billNo = String(r?.[0] || "").trim();
+      if (!billNo.startsWith(prefix)) continue;
+      const tail = billNo.slice(prefix.length);
+      const n = parseInt(tail, 10);
+      if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
+    }
+    const nextSeq = maxSeq + 1;
+    const padded = String(nextSeq).padStart(6, "0");
+    return `${prefix}${padded}`;
   }
-
-  const nextSeq = maxSeq + 1;
-  const padded = String(nextSeq).padStart(6, "0");
-  return `${prefix}${padded}`;
 }
 
 // ─────────────────────────────────────────────

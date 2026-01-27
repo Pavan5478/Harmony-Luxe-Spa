@@ -7,8 +7,8 @@ import InvoicesFiltersBar from "@/components/invoice/InvoicesFiltersBar";
 
 type SP = {
   q?: string;
-  from?: string;
-  to?: string;
+  from?: string; // usually YYYY-MM-DD
+  to?: string;   // usually YYYY-MM-DD
   status?: "FINAL" | "DRAFT" | "VOID" | "ALL";
 };
 
@@ -26,10 +26,59 @@ type Row = {
   cashier: string;
 };
 
-function parseISO(d?: string) {
-  if (!d) return NaN;
-  const t = Date.parse(d);
+const IST_TZ = "Asia/Kolkata";
+const IST_OFFSET = "+05:30";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isYMD(v: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function parseDateInputToTs(v?: string): number {
+  if (!v) return NaN;
+  const s = String(v).trim();
+  if (!s) return NaN;
+
+  // If date input is YYYY-MM-DD, treat as IST midnight to avoid off-by-one filtering.
+  if (isYMD(s)) {
+    const t = Date.parse(`${s}T00:00:00${IST_OFFSET}`);
+    return Number.isFinite(t) ? t : NaN;
+  }
+
+  const t = Date.parse(s);
   return Number.isFinite(t) ? t : NaN;
+}
+
+function parseRowDateToTs(dateISO: string): number {
+  const s = String(dateISO || "").trim();
+  if (!s) return 0;
+
+  // If sheet stores YYYY-MM-DD, treat as IST midnight
+  if (isYMD(s)) {
+    const t = Date.parse(`${s}T00:00:00${IST_OFFSET}`);
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function parseMoney(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const s = String(v ?? "").trim();
+  if (!s) return 0;
+
+  // remove currency symbols, commas, spaces; keep digits, dot, minus
+  const cleaned = s.replace(/[^\d.-]/g, "");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeStatus(raw: unknown, billNo?: string): RowStatus {
+  const s = String(raw ?? "").trim().toUpperCase();
+  if (s === "FINAL" || s === "DRAFT" || s === "VOID") return s;
+  // fallback inference
+  return billNo ? "FINAL" : "DRAFT";
 }
 
 function StatusBadge({ s }: { s: RowStatus }) {
@@ -66,8 +115,15 @@ export default async function InvoicesListPage({
   const sp = (await searchParams) || {};
   const q = (sp.q || "").trim().toLowerCase();
   const status = (sp.status || "ALL") as SP["status"];
-  const fromTs = parseISO(sp.from) || Number.NEGATIVE_INFINITY;
-  const toTs = (parseISO(sp.to) || Number.POSITIVE_INFINITY) + 24 * 3600 * 1000;
+
+  // Filters: treat from/to as IST local days when input is YYYY-MM-DD
+  const fromStart = parseDateInputToTs(sp.from);
+  const toStart = parseDateInputToTs(sp.to);
+
+  const fromTs = Number.isFinite(fromStart) ? fromStart : Number.NEGATIVE_INFINITY;
+  // end-exclusive: include the whole "to" day
+  const toTs =
+    Number.isFinite(toStart) ? toStart + DAY_MS : Number.POSITIVE_INFINITY;
 
   const session = await getSession();
   const role = session.user?.role;
@@ -85,20 +141,20 @@ export default async function InvoicesListPage({
       if (!key) return null;
 
       const dateISO = String(r?.[2] || "").trim();
-      const ts = Date.parse(dateISO);
+      const ts = parseRowDateToTs(dateISO);
 
-      let st = String(r?.[22] || "").trim().toUpperCase();
-      if (!st) st = billNo ? "FINAL" : "DRAFT";
+      const stRaw = r?.[22];
+      const st = normalizeStatus(stRaw, billNo);
 
       return {
         id: id || undefined,
         billNo: billNo || undefined,
         key,
         dateISO,
-        ts: Number.isFinite(ts) ? ts : 0,
+        ts,
         customer: String(r?.[3] || ""),
-        amount: Number(r?.[15] || 0),
-        status: (st as RowStatus) || "DRAFT",
+        amount: parseMoney(r?.[15]),
+        status: st,
         cashier: String(r?.[21] || ""),
       };
     })
@@ -114,12 +170,14 @@ export default async function InvoicesListPage({
     })
     .sort((a, b) => b.ts - a.ts);
 
-  const dtDate = new Intl.DateTimeFormat(undefined, {
+  const dtDate = new Intl.DateTimeFormat("en-IN", {
+    timeZone: IST_TZ,
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
-  const dtTime = new Intl.DateTimeFormat(undefined, {
+  const dtTime = new Intl.DateTimeFormat("en-IN", {
+    timeZone: IST_TZ,
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -135,7 +193,6 @@ export default async function InvoicesListPage({
         count={filtered.length}
       />
 
-      {/* List */}
       <section className="min-w-0">
         {filtered.length === 0 ? (
           <div className="rounded-xl bg-background/70 p-4 text-center text-xs text-muted sm:text-sm">
@@ -145,7 +202,7 @@ export default async function InvoicesListPage({
           <div className="min-w-0 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
             <div className="divide-y divide-border/40">
               {filtered.map((r) => {
-                const dateObj = new Date(r.dateISO);
+                const dateObj = new Date(r.ts);
                 const isValid = !Number.isNaN(dateObj.getTime());
                 const dateStr = isValid ? dtDate.format(dateObj) : "—";
                 const timeStr = isValid ? dtTime.format(dateObj) : "";
@@ -157,7 +214,6 @@ export default async function InvoicesListPage({
                 return (
                   <div key={r.key} className="px-3 py-2.5 transition hover:bg-card/90 sm:px-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      {/* Left */}
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <Link
@@ -171,7 +227,6 @@ export default async function InvoicesListPage({
                           <StatusBadge s={r.status} />
                         </div>
 
-                        {/* keep compact: single meta line */}
                         <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-muted">
                           <span className="truncate">{r.customer || "Walk-in customer"}</span>
                           <span className="hidden sm:inline">•</span>
@@ -188,7 +243,6 @@ export default async function InvoicesListPage({
                         </div>
                       </div>
 
-                      {/* Right */}
                       <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
                         <div className="text-sm font-semibold text-foreground tabular-nums">
                           {inr(r.amount)}
@@ -203,15 +257,18 @@ export default async function InvoicesListPage({
                             View
                           </Link>
 
-                          <Link
-                            href={printHref}
-                            prefetch={false}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                          >
-                            Print
-                          </Link>
+                          {/* Print only for FINAL */}
+                          {r.status === "FINAL" ? (
+                            <Link
+                              href={printHref}
+                              prefetch={false}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
+                            >
+                              Print
+                            </Link>
+                          ) : null}
 
                           {canEdit && r.status === "DRAFT" ? (
                             <Link

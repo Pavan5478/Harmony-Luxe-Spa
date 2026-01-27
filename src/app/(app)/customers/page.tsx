@@ -139,7 +139,7 @@ export default async function CustomersPage({
                     <th className="px-4 py-3 text-left">Customer</th>
                     <th className="px-4 py-3 text-left">Phone</th>
                     <th className="px-4 py-3 text-left">Last visit</th>
-                    <th className="px-4 py-3 text-right">Invoices</th>
+                    <th className="px-4 py-3 text-center">Invoices</th>
                     <th className="px-4 py-3 text-right">Final spend</th>
                   </tr>
                 </thead>
@@ -160,9 +160,9 @@ export default async function CustomersPage({
                       </td>
                       <td className="px-4 py-3 text-muted">{c.phone || c.key}</td>
                       <td className="px-4 py-3 text-muted">{fmtDate(c.lastDateISO)}</td>
-                      <td className="px-4 py-3 text-right text-muted">
+                      <td className="px-4 py-3 text-center text-muted">
                         <span className="font-semibold text-foreground">{c.invoicesCount}</span>
-                        <span className="ml-2 text-[11px]">(F:{c.finalCount} D:{c.draftCount} V:{c.voidCount})</span>
+                        {/* <span className="ml-2 text-[11px]">(F:{c.finalCount} D:{c.draftCount} V:{c.voidCount})</span> */}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-foreground">
                         {inr(c.totalFinal)}

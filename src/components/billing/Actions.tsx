@@ -79,6 +79,20 @@ function SaveIcon({ className = "" }: { className?: string }) {
   );
 }
 
+function CloseIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" className={className} aria-hidden>
+      <path
+        d="M18 6 6 18M6 6l12 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export default function BillingActions({
   payload,
   disabled,
@@ -88,7 +102,6 @@ export default function BillingActions({
 }: Props) {
   const router = useRouter();
   const helpId = useId();
-  const statusId = useId();
 
   const [loading, setLoading] = useState<LoadState>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -119,28 +132,41 @@ export default function BillingActions({
     return "border-border/70 bg-background/60 text-muted";
   }, [statusMessage, tone]);
 
+  function setBanner(nextTone: BannerTone, msg: string) {
+    setTone(nextTone);
+    setStatusMessage(msg);
+  }
+
+  async function readJsonSafe(res: Response): Promise<any> {
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
+  }
+
   // Helper: create or update a bill with latest payload
   async function persistBill(idOrNo?: string | null): Promise<string> {
-    // Update existing (draft)
     if (idOrNo) {
       const res = await fetch(`/api/bills/${encodeURIComponent(idOrNo)}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json().catch(() => ({}));
+      const data = await readJsonSafe(res);
       return (data.bill?.id as string | undefined) || idOrNo;
     }
 
-    // Create new draft
     const res = await fetch("/api/bills", {
       method: "POST",
       headers: { "content-type": "application/json" },
+      cache: "no-store",
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
+    const data = await readJsonSafe(res);
     return data.id as string;
   }
 
@@ -148,22 +174,16 @@ export default function BillingActions({
     if (anyBlocked) return;
 
     setLoading("SAVE");
-    setTone("info");
-    setStatusMessage("Saving draft… syncing to Google Sheets.");
+    setBanner("info", "Saving draft… syncing to Google Sheets.");
 
     try {
       const id = await persistBill(editKey);
-
-      setTone("success");
-      setStatusMessage("Draft saved.");
-
+      setBanner("success", "Draft saved.");
       router.replace(`/billing?edit=${encodeURIComponent(id)}`);
       router.refresh();
     } catch (e) {
       console.error("Save failed", e);
-      setTone("error");
-      setStatusMessage("Save failed. Check connection and try again.");
-      alert("Failed to save. Please try again.");
+      setBanner("error", "Save failed. Check connection and try again.");
     } finally {
       setLoading(null);
     }
@@ -172,79 +192,84 @@ export default function BillingActions({
   async function handlePreview() {
     if (anyBlocked) return;
 
-    // For FINAL invoices we just go to view screen
+    // If already FINAL, just open invoice
     if (isEditingFinal && editKey) {
       router.push(`/invoices/${encodeURIComponent(editKey)}`);
       return;
     }
 
     setLoading("PREVIEW");
-    setTone("info");
-    setStatusMessage("Opening preview…");
+    setBanner("info", "Opening preview…");
 
     try {
       const id = await persistBill(editKey);
 
-      // IMPORTANT: ensure billing URL becomes /billing?edit=<id>
-      // so browser back returns to the same draft, not a fresh form.
+      // Keep the edit link stable (so refresh/back keeps the same draft)
       router.replace(`/billing?edit=${encodeURIComponent(id)}`);
 
-      // Now open invoice with a "from=billing" back-link
-      router.push(
-        `/invoices/${encodeURIComponent(id)}?from=billing&edit=${encodeURIComponent(id)}`
-      );
+      // Open preview
+      router.push(`/invoices/${encodeURIComponent(id)}?from=billing&edit=${encodeURIComponent(id)}`);
     } catch (e) {
       console.error("Preview failed", e);
-      setTone("error");
-      setStatusMessage("Preview failed. Check connection and try again.");
-      alert("Failed to open preview. Please try again.");
+      setBanner("error", "Preview failed. Check connection and try again.");
     } finally {
       setLoading(null);
     }
   }
 
   async function handleFinalize() {
-    if (!!disabled || finalizing || previewing || saving) return;
+    if (anyBlocked) return;
 
-    // If already a FINAL invoice, just go to view page
     if (isEditingFinal && editKey) {
       router.push(`/invoices/${encodeURIComponent(editKey)}`);
       return;
     }
 
     setLoading("FINAL");
-    setTone("info");
-    setStatusMessage("Generating invoice… updating Google Sheets.");
+    setBanner("info", "Generating invoice… updating Google Sheets.");
 
     try {
-      // 1) make sure latest changes are stored in a draft
-      const draftId = await persistBill(editKey);
+      // Use cashierEmail from payload (single source of truth)
+      const email = payload?.cashierEmail || "cashier@harmonyluxe.com";
 
-      // 2) finalize the draft in backend (DRAFT -> FINAL + BillNo)
-      const email =
-        typeof window !== "undefined"
-          ? localStorage.getItem("bb.email") || "cashier@harmoneyluxe.com"
-          : "cashier@harmoneyluxe.com";
+      // ✅ Fast path: if this is a brand-new bill (no editKey), finalize in one API call
+      if (!editKey) {
+        const res = await fetch("/api/bills/finalize", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ ...payload, cashierEmail: email }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+
+        const data = await readJsonSafe(res);
+        const billNo: string = data?.bill?.billNo || data?.bill?.id;
+        if (!billNo) throw new Error("Missing bill number");
+
+        setBanner("success", "Invoice generated. Opening…");
+        router.replace(`/invoices/${encodeURIComponent(billNo)}`);
+        return;
+      }
+
+      // Existing draft: save latest payload, then finalize
+      const draftId = await persistBill(editKey);
 
       const resFin = await fetch(`/api/bills/${encodeURIComponent(draftId)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify({ cashierEmail: email }),
       });
       if (!resFin.ok) throw new Error(await resFin.text());
 
-      const dataFin = await resFin.json();
-      const billNo: string = dataFin?.bill?.billNo || dataFin?.bill?.id;
+      const dataFin = await readJsonSafe(resFin);
+      const billNo: string = dataFin?.bill?.billNo || dataFin?.bill?.id || draftId;
 
-      setTone("success");
-      setStatusMessage("Invoice generated. Opening…");
-
+      setBanner("success", "Invoice generated. Opening…");
       router.replace(`/invoices/${encodeURIComponent(billNo)}`);
     } catch (e) {
       console.error("Finalize failed", e);
-      setTone("error");
-      setStatusMessage("Finalize failed. Check connection and try again.");
-      alert("Failed to finalize invoice. Please try again.");
+      setBanner("error", "Finalize failed. Check connection and try again.");
     } finally {
       setLoading(null);
     }
@@ -266,18 +291,16 @@ export default function BillingActions({
 
   return (
     <div className="space-y-3" aria-busy={busy}>
-      {/* Buttons */}
       <div
         role="group"
         aria-label="Billing actions"
         aria-describedby={helpId}
         className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
       >
-        {/* Primary action */}
         <button
           type="button"
           onClick={handleFinalize}
-          disabled={!!disabled || finalizing || previewing || saving}
+          disabled={anyBlocked}
           title={
             isEditingFinal
               ? "Open the existing invoice"
@@ -293,7 +316,6 @@ export default function BillingActions({
           <span>{finalLabel}</span>
         </button>
 
-        {/* Secondary actions */}
         {showSave && (
           <button
             type="button"
@@ -329,7 +351,6 @@ export default function BillingActions({
         )}
       </div>
 
-      {/* Help + status */}
       <div className="space-y-2">
         <p id={helpId} className="text-[11px] leading-relaxed text-muted">
           Draft bills are stored in Google Sheets with status{" "}
@@ -341,37 +362,46 @@ export default function BillingActions({
           number and starts appearing in Invoices &amp; Reports.
         </p>
 
-        {/* Live status banner (screen-reader friendly) */}
         {statusMessage && (
           <div
-            id={statusId}
-            role="status"
-            aria-live="polite"
+            role={tone === "error" ? "alert" : "status"}
+            aria-live={tone === "error" ? "assertive" : "polite"}
             className={[
-              "flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] leading-relaxed",
+              "flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] leading-relaxed",
               bannerClasses,
             ].join(" ")}
           >
-            <span className="mt-[2px] inline-flex h-4 w-4 items-center justify-center">
-              {tone === "error" ? (
-                <span aria-hidden className="text-danger">!</span>
-              ) : tone === "success" ? (
-                <span aria-hidden className="text-emerald-200">✓</span>
-              ) : busy ? (
-                <Spinner className="text-muted" />
-              ) : (
-                <span aria-hidden className="text-muted">•</span>
-              )}
-            </span>
+            <div className="flex min-w-0 items-start gap-2">
+              <span className="mt-[2px] inline-flex h-4 w-4 items-center justify-center">
+                {tone === "error" ? (
+                  <span aria-hidden className="text-danger">!</span>
+                ) : tone === "success" ? (
+                  <span aria-hidden className="text-emerald-200">✓</span>
+                ) : busy ? (
+                  <Spinner className="text-muted" />
+                ) : (
+                  <span aria-hidden className="text-muted">•</span>
+                )}
+              </span>
 
-            <div className="min-w-0">
-              <div className="font-medium text-foreground/90">{statusMessage}</div>
-              {busy && (
-                <div className="mt-0.5 text-[10px] text-muted">
-                  Please don’t refresh while this is running.
-                </div>
-              )}
+              <div className="min-w-0">
+                <div className="font-medium text-foreground/90">{statusMessage}</div>
+                {busy && (
+                  <div className="mt-0.5 text-[10px] text-muted">
+                    Please don’t refresh while this is running.
+                  </div>
+                )}
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setStatusMessage(null)}
+              className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-muted hover:bg-card hover:text-foreground"
+              aria-label="Dismiss message"
+            >
+              <CloseIcon />
+            </button>
           </div>
         )}
       </div>

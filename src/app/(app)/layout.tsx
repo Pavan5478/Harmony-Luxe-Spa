@@ -21,7 +21,7 @@ export default async function ProtectedLayout({
         <Topbar />
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+          <div className="mx-auto w-full ">{children}</div>
         </main>
       </div>
     </div>

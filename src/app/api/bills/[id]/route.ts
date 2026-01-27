@@ -1,18 +1,10 @@
 ﻿// src/app/api/bills/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import {
-  getBill,
-  updateBill,
-  finalizeDraft,
-  markPrinted,
-  voidBill,
-} from "@/store/bills";
+import { getBill, updateBill, finalizeDraft, markPrinted, voidBill } from "@/store/bills";
 import { moveInvoiceToDeleted } from "@/lib/sheets";
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
+type RouteContext = { params: Promise<{ id: string }> };
 
 async function decodeId(ctx: RouteContext) {
   const { id } = await ctx.params;
@@ -23,42 +15,62 @@ async function decodeId(ctx: RouteContext) {
   }
 }
 
-export const dynamic = "force-dynamic";
-
-// GET single bill (by draft id or billNo)
-export async function GET(_req: NextRequest, ctx: RouteContext) {
-  const idOrNo = await decodeId(ctx);
-  const bill = await getBill(idOrNo);
-  if (!bill) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  return NextResponse.json({ bill });
+function jsonNoStore(data: any, init?: ResponseInit) {
+  const res = NextResponse.json(data, init);
+  res.headers.set("Cache-Control", "no-store");
+  return res;
 }
 
-// PUT – update existing bill (DRAFT only; FINAL/VOID are read-only)
+export const dynamic = "force-dynamic";
+
+/**
+ * GET single bill (by draft id or billNo)
+ * ✅ Protected (must be logged in)
+ */
+export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const session = await getSession();
+  if (!session.user) {
+    return jsonNoStore({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const idOrNo = await decodeId(ctx);
+  const bill = await getBill(idOrNo);
+
+  if (!bill) {
+    return jsonNoStore({ ok: false, error: "Not found" }, { status: 404 });
+  }
+
+  return jsonNoStore({ ok: true, bill });
+}
+
+/**
+ * PUT – update existing bill (DRAFT only; FINAL/VOID are read-only)
+ * ✅ Protected + role-based
+ */
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   const session = await getSession();
   const role = session.user?.role;
 
   if (!session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonNoStore({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   if (role === "ACCOUNTS") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return jsonNoStore({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
   const idOrNo = await decodeId(ctx);
   const existing = await getBill(idOrNo);
 
   if (!existing) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return jsonNoStore({ ok: false, error: "Not found" }, { status: 404 });
   }
 
   const status = (existing as any).status as "DRAFT" | "FINAL" | "VOID" | undefined;
 
   if (status === "FINAL" || status === "VOID") {
-    return NextResponse.json(
+    return jsonNoStore(
       {
+        ok: false,
         error:
           "Final / void invoices are read-only. Please create a new bill if you need changes.",
       },
@@ -66,70 +78,99 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     );
   }
 
-  const patch = (await req.json().catch(() => ({}))) as any;
+  let patch: any = {};
+  try {
+    patch = await req.json();
+  } catch {
+    patch = {};
+  }
 
   try {
     const updated = await updateBill(idOrNo, patch);
-    return NextResponse.json({ bill: updated });
+    return jsonNoStore({ ok: true, bill: updated });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Failed to update" },
-      { status: 404 }
-    );
+    // updateBill can throw "Bill not found" or other validation issues
+    const msg = e instanceof Error ? e.message : "Failed to update";
+    const code = msg.toLowerCase().includes("not found") ? 404 : 400;
+    return jsonNoStore({ ok: false, error: msg }, { status: code });
   }
 }
 
-// PATCH – finalize draft OR mark printed
+/**
+ * PATCH – finalize draft OR mark printed
+ * ✅ Protected + role-based
+ */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   const session = await getSession();
+  const role = session.user?.role;
+
   if (!session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonNoStore({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (role === "ACCOUNTS") {
+    return jsonNoStore({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
   const idOrNo = await decodeId(ctx);
-  const body = (await req.json().catch(() => ({}))) as any;
+
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
 
   // 1) mark printed
   if (body?.markPrinted) {
     try {
       const b = await markPrinted(idOrNo);
-      return NextResponse.json({ bill: b });
+      return jsonNoStore({ ok: true, bill: b });
     } catch (e: any) {
       const msg = e instanceof Error ? e.message : "Not found";
-      return NextResponse.json({ error: msg }, { status: 404 });
+      return jsonNoStore({ ok: false, error: msg }, { status: 404 });
     }
   }
 
   // 2) finalize draft -> FINAL
   const cashierEmail: string =
-    body?.cashierEmail || session.user.email || "unknown@harmoneyluxe.com";
+    body?.cashierEmail || session.user.email || "unknown@harmonyluxe.com";
 
   try {
     const fin = await finalizeDraft(idOrNo, cashierEmail);
-    return NextResponse.json({ bill: fin, savedToSheets: true });
+    return jsonNoStore({ ok: true, bill: fin, savedToSheets: true });
   } catch (e: any) {
     const msg = e instanceof Error ? e.message : "Failed to finalize";
     const statusCode = msg.includes("Draft not found") ? 404 : 400;
-    return NextResponse.json({ error: msg }, { status: statusCode });
+    return jsonNoStore({ ok: false, error: msg }, { status: statusCode });
   }
 }
 
-// DELETE – admin only
+/**
+ * DELETE – admin only
+ * NOTE: your delete is actually "VOID + move row to Deleted sheet"
+ * ✅ Protected + role-based
+ */
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   const session = await getSession();
   const role = session.user?.role;
 
   if (!session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonNoStore({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   if (role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return jsonNoStore({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
   const idOrNo = await decodeId(ctx);
   const bill = await getBill(idOrNo);
+
   if (!bill) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return jsonNoStore({ ok: false, error: "Not found" }, { status: 404 });
+  }
+
+  // Optional guard: prevent re-delete if already VOID
+  if ((bill as any).status === "VOID") {
+    return jsonNoStore({ ok: false, error: "This invoice is already void." }, { status: 400 });
   }
 
   try {
@@ -138,11 +179,9 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     const key = (bill as any).billNo || (bill as any).id || idOrNo;
     await moveInvoiceToDeleted(key);
 
-    return NextResponse.json({ ok: true, bill: voided });
+    return jsonNoStore({ ok: true, bill: voided });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Failed to delete" },
-      { status: 400 }
-    );
+    const msg = e instanceof Error ? e.message : "Failed to delete";
+    return jsonNoStore({ ok: false, error: msg }, { status: 400 });
   }
 }

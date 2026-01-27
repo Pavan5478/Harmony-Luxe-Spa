@@ -66,7 +66,7 @@ export default function Topbar() {
   return (
     <header className="no-print sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
       {/* On desktop (lg+): hide brand completely + keep actions aligned right */}
-      <div className="mx-auto flex h-14 max-w-6xl min-w-0 items-center justify-between px-3 sm:h-16 sm:px-4 lg:justify-end lg:px-6">
+      <div className="mx-auto flex h-14 min-w-0 items-center justify-between px-3 sm:h-16 sm:px-4 lg:justify-end lg:px-6">
         {/* Brand: MOBILE ONLY */}
         <Link
           href="/dashboard"
@@ -74,9 +74,13 @@ export default function Topbar() {
           className="flex min-w-0 items-center gap-2 lg:hidden"
           aria-label="Go to Dashboard"
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs text-primary shadow-sm">
-            XS
-          </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background shadow ring-1 ring-primary/20 overflow-hidden">
+      <img
+        src="/harmony_luxe.png"
+        alt="Harmony Luxe logo"
+        className="h-6 w-6 object-contain"
+      />
+    </div>
           <div className="truncate text-sm font-semibold text-foreground">Harmony Luxe</div>
         </Link>
 

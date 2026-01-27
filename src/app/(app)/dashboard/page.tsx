@@ -36,11 +36,31 @@ type ParsedExpense = {
   category: string;
 };
 
-function dayKey(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
+const IST_TZ = "Asia/Kolkata";
+
+function ymdInTz(d: Date, timeZone = IST_TZ) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = fmt.formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value ?? "0000";
+  const m = parts.find((p) => p.type === "month")?.value ?? "00";
+  const dd = parts.find((p) => p.type === "day")?.value ?? "00";
+  return { y, m, d: dd };
+}
+
+function dayKeyIST(d: Date) {
+  const { y, m, d: dd } = ymdInTz(d, IST_TZ);
   return `${y}-${m}-${dd}`;
+}
+
+function monthKeyIST(d: Date) {
+  const { y, m } = ymdInTz(d, IST_TZ);
+  return `${y}-${m}`;
 }
 
 export default async function DashboardPage() {
@@ -51,23 +71,32 @@ export default async function DashboardPage() {
   const userEmail = session.user?.email || "";
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayKey = dayKeyIST(now);
+  const thisMonthKey = monthKeyIST(now);
 
-  const monthLabel = startOfMonth.toLocaleDateString(undefined, {
+  const prevMonthDate = new Date(now);
+  prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+  const prevMonthKey = monthKeyIST(prevMonthDate);
+
+  const monthLabel = new Intl.DateTimeFormat(undefined, {
+    timeZone: IST_TZ,
     month: "short",
     year: "numeric",
-  });
-  const todayLabel = startOfToday.toLocaleDateString(undefined, {
+  }).format(now);
+
+  const todayLabel = new Intl.DateTimeFormat(undefined, {
+    timeZone: IST_TZ,
     day: "2-digit",
     month: "short",
     year: "numeric",
-  });
+  }).format(now);
 
-  const totalDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysElapsedInMonth = Math.min(now.getDate(), totalDaysInMonth);
+  // Days in month / elapsed (IST)
+  const { y: yNow, m: mNow, d: dNow } = ymdInTz(now, IST_TZ);
+  const yearNum = Number(yNow);
+  const monthIdx = Math.max(0, Number(mNow) - 1);
+  const totalDaysInMonth = new Date(Date.UTC(yearNum, monthIdx + 1, 0)).getUTCDate();
+  const daysElapsedInMonth = Math.min(Number(dNow) || 1, totalDaysInMonth);
 
   const [allBillsRaw, allExpensesRaw] = await Promise.all([listBills(), listExpenses()]);
 
@@ -76,7 +105,7 @@ export default async function DashboardPage() {
   // ─────────────────────────────────────
   const parsedBills: ParsedBill[] = (allBillsRaw as any[])
     .map((b) => {
-      const rawDate = b.finalizedAt || b.createdAt;
+      const rawDate = b.finalizedAt || b.createdAt || b.billDate;
       const dateISO = String(rawDate ?? "");
       const ts = Date.parse(dateISO);
       const status = (b.status || "DRAFT") as BillStatus;
@@ -111,9 +140,9 @@ export default async function DashboardPage() {
   const draftCount = parsedBills.filter((b) => b.status === "DRAFT").length;
   const voidCount = parsedBills.filter((b) => b.status === "VOID").length;
 
-  const monthFinals = finals.filter((b) => b.date >= startOfMonth);
-  const prevMonthFinals = finals.filter((b) => b.date >= startOfPrevMonth && b.date <= endOfPrevMonth);
-  const todayFinals = finals.filter((b) => b.date >= startOfToday);
+  const monthFinals = finals.filter((b) => monthKeyIST(b.date) === thisMonthKey);
+  const prevMonthFinals = finals.filter((b) => monthKeyIST(b.date) === prevMonthKey);
+  const todayFinals = finals.filter((b) => dayKeyIST(b.date) === todayKey);
 
   const todayRevenue = todayFinals.reduce((s, b) => s + b.grandTotal, 0);
   const monthRevenue = monthFinals.reduce((s, b) => s + b.grandTotal, 0);
@@ -150,8 +179,8 @@ export default async function DashboardPage() {
     })
     .filter((x) => Number.isFinite(x.ts));
 
-  const monthExpenses = parsedExpenses.filter((e) => e.date >= startOfMonth);
-  const todayExpenses = parsedExpenses.filter((e) => e.date >= startOfToday);
+  const monthExpenses = parsedExpenses.filter((e) => monthKeyIST(e.date) === thisMonthKey);
+  const todayExpenses = parsedExpenses.filter((e) => dayKeyIST(e.date) === todayKey);
 
   const monthExpensesTotal = monthExpenses.reduce((s, e) => s + e.amount, 0);
   const todayExpensesTotal = todayExpenses.reduce((s, e) => s + e.amount, 0);
@@ -203,29 +232,33 @@ export default async function DashboardPage() {
   }
   const pmTotalAmount = Object.values(pmTotals).reduce((s, v) => s + v, 0);
 
-  // Revenue + Net maps (for last 14 days)
+  // Revenue + expenses by IST day
   const revenueByDay: Record<string, number> = {};
   for (const b of finals) {
-    const k = dayKey(b.date);
+    const k = dayKeyIST(b.date);
     revenueByDay[k] = (revenueByDay[k] || 0) + b.grandTotal;
   }
   const expensesByDay: Record<string, number> = {};
   for (const e of parsedExpenses) {
-    const k = dayKey(e.date);
+    const k = dayKeyIST(e.date);
     expensesByDay[k] = (expensesByDay[k] || 0) + e.amount;
   }
 
   const last14: { key: string; label: string; weekday: string; total: number }[] = [];
   const last7Net: { label: string; weekday: string; revenue: number; expenses: number; net: number }[] = [];
 
+  const weekdayFmt = new Intl.DateTimeFormat(undefined, { timeZone: IST_TZ, weekday: "short" });
+
   for (let i = 13; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    const k = dayKey(d);
 
+    const k = dayKeyIST(d);
     const revenue = revenueByDay[k] || 0;
-    const label = String(d.getDate()).padStart(2, "0");
-    const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
+
+    const parts = ymdInTz(d, IST_TZ);
+    const label = parts.d;
+    const weekday = weekdayFmt.format(d);
 
     last14.push({ key: k, label, weekday, total: revenue });
   }
@@ -233,27 +266,39 @@ export default async function DashboardPage() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    const k = dayKey(d);
 
+    const k = dayKeyIST(d);
     const revenue = revenueByDay[k] || 0;
     const expenses = expensesByDay[k] || 0;
     const net = revenue - expenses;
 
-    const label = String(d.getDate()).padStart(2, "0");
-    const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
+    const parts = ymdInTz(d, IST_TZ);
+    const label = parts.d;
+    const weekday = weekdayFmt.format(d);
 
     last7Net.push({ label, weekday, revenue, expenses, net });
   }
 
   const maxDayTotal = Math.max(...last14.map((d) => d.total), 0);
   const last14Total = last14.reduce((s, d) => s + d.total, 0);
-  const last7Revenue = last14.slice(-7); // for mini graph in KPI
+  const last7Revenue = last14.slice(-7);
 
   const canCreateBill = role === "ADMIN" || role === "CASHIER";
 
+  // Links for KPI drill-down (works with your newer DashboardKpis)
+  const monthFrom = `${thisMonthKey}-01`;
+  const monthTo = todayKey;
+
+  const links = {
+    monthFinals: `/invoices?status=FINAL&from=${encodeURIComponent(monthFrom)}&to=${encodeURIComponent(monthTo)}`,
+    todayFinals: `/invoices?status=FINAL&from=${encodeURIComponent(todayKey)}&to=${encodeURIComponent(todayKey)}`,
+    invoicesAll: `/invoices`,
+    expenses: `/expenses`,
+    customers: `/customers`,
+  };
+
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
-      {/* Slim context row (NOT a big header) */}
+    <div className="mx-auto w-full pb-10 pt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
           <span className="rounded-full bg-card px-2.5 py-1">
@@ -272,7 +317,7 @@ export default async function DashboardPage() {
         {canCreateBill ? (
           <Link
             href="/billing"
-            className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-black shadow-sm hover:bg-primary/90"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold !text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:!text-slate-900 dark:hover:bg-slate-100"
           >
             + Create bill
           </Link>
@@ -280,37 +325,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-4 space-y-4 lg:space-y-5">
-        <DashboardKpis
-          monthLabel={monthLabel}
-          todayLabel={todayLabel}
-          monthRevenue={monthRevenue}
-          todayRevenue={todayRevenue}
-          revenueChangePct={revenueChangePct}
-          projectedRevenue={projectedRevenue}
-          monthExpensesTotal={monthExpensesTotal}
-          todayExpensesTotal={todayExpensesTotal}
-          monthProfit={monthProfit}
-          todayProfit={todayProfit}
-          expenseRatio={expenseRatio}
-          avgBill={avgBill}
-          monthInvoiceCount={monthInvoiceCount}
-          todayCount={todayCount}
-          finalCount={finalCount}
-          draftCount={draftCount}
-          voidCount={voidCount}
-          activeCustomers={activeCustomers}
-          finalizationRate={finalizationRate}
-          totalInvoices={totalInvoices}
-          last7Revenue={last7Revenue}
-        />
-
         <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
           <div className="space-y-4 lg:col-span-8">
-            <RevenueTrendCard last14={last14} maxDayTotal={maxDayTotal} total={last14Total} />
-            <RecentInvoices />
-          </div>
-
-          <div className="space-y-4 lg:col-span-4">
+             <RevenueTrendCard last14={last14} maxDayTotal={maxDayTotal} total={last14Total} />
             <ProfitCard
               monthLabel={monthLabel}
               monthProfit={monthProfit}
@@ -320,6 +337,10 @@ export default async function DashboardPage() {
               todayExpensesTotal={todayExpensesTotal}
               data={last7Net}
             />
+            <RecentInvoices />
+          </div>
+
+          <div className="space-y-4 lg:col-span-4">
             <PaymentMixCard pmTotals={pmTotals} pmTotalAmount={pmTotalAmount} monthLabel={monthLabel} />
             <ExpensesByCategoryCard monthLabel={monthLabel} data={expenseCategoryData} expenseRatio={expenseRatio} />
             <TopCustomersCard data={topCustomers} monthRevenue={monthRevenue} />

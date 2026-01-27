@@ -2,6 +2,19 @@
 import Image from "next/image";
 import { inr } from "@/lib/format";
 
+function toPaise(v: number): number {
+  return Math.round((Number(v) || 0) * 100);
+}
+function fromPaise(p: number): number {
+  return p / 100;
+}
+function calcLineAmount(rate: number, qty: number): number {
+  const ratePaise = toPaise(rate);
+  const q = Number(qty) || 0;
+  const linePaise = Math.round(ratePaise * q);
+  return fromPaise(linePaise);
+}
+
 export default function InvoicePaper({
   bill,
   spaName,
@@ -22,7 +35,7 @@ export default function InvoicePaper({
 
   const t = bill.totals || {};
   const discount = Number(t.discount || 0);
-  const hasDiscount = discount > 0;
+  const hasDiscount = discount > 0.005;
 
   const notes = String(bill.notes || "").trim();
   const hasNotes = notes.length > 0;
@@ -41,7 +54,7 @@ export default function InvoicePaper({
       className={[
         "invoice-paper mx-auto bg-white p-[2mm] text-slate-900",
         "w-full max-w-[210mm]",
-        "min-h-[297mm] print:min-h-0", // ✅ preview shows full page, print doesn't force it
+        "min-h-[297mm] print:min-h-0",
         "print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]",
       ].join(" ")}
     >
@@ -62,9 +75,7 @@ export default function InvoicePaper({
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             Tax invoice
           </div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            Bill #{billNo}
-          </div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">Bill #{billNo}</div>
           <div className="mt-0.5 text-[11px] text-slate-600">{dateStr}</div>
         </div>
       </div>
@@ -103,22 +114,13 @@ export default function InvoicePaper({
             {bill.split && bill.paymentMode === "SPLIT" ? (
               <div className="space-y-0.5">
                 <div>
-                  Cash:{" "}
-                  <span className="font-medium text-slate-900">
-                    {inr(bill.split.cash || 0)}
-                  </span>
+                  Cash: <span className="font-medium text-slate-900">{inr(bill.split.cash || 0)}</span>
                 </div>
                 <div>
-                  Card:{" "}
-                  <span className="font-medium text-slate-900">
-                    {inr(bill.split.card || 0)}
-                  </span>
+                  Card: <span className="font-medium text-slate-900">{inr(bill.split.card || 0)}</span>
                 </div>
                 <div>
-                  UPI:{" "}
-                  <span className="font-medium text-slate-900">
-                    {inr(bill.split.upi || 0)}
-                  </span>
+                  UPI: <span className="font-medium text-slate-900">{inr(bill.split.upi || 0)}</span>
                 </div>
               </div>
             ) : null}
@@ -140,26 +142,36 @@ export default function InvoicePaper({
             <th className="py-2 text-right">Amount</th>
           </tr>
         </thead>
+
         <tbody>
           {lines.map((l: any, idx: number) => {
             const qty = Number(l.qty || 0);
             const rate = Number(l.rate || 0);
-            const amount = qty * rate;
+
+            // ✅ accept stored amount even if it comes as string from sheets
+            const storedAmount = Number(l.amount);
+            const amount = Number.isFinite(storedAmount)
+              ? storedAmount
+              : calcLineAmount(rate, qty);
 
             return (
-              <tr key={idx} className="border-b border-slate-100 align-top">
+              <tr
+                key={`${l.itemId || "x"}-${l.variant || "v"}-${idx}`}
+                className="border-b border-slate-100 align-top"
+              >
                 <td className="py-2 pr-2">{idx + 1}</td>
+
                 <td className="py-2 pr-2">
                   <div className="font-medium text-slate-900">{l.name || "—"}</div>
-                  {l.itemId ? (
-                    <div className="text-[10px] text-slate-500">Code: {l.itemId}</div>
-                  ) : null}
+                  {l.itemId ? <div className="text-[10px] text-slate-500">Code: {l.itemId}</div> : null}
                 </td>
+
                 <td className="py-2 pr-2">
                   {l.variant || <span className="text-slate-400">—</span>}
                 </td>
-                <td className="py-2 pr-2 text-right">{qty}</td>
-                <td className="py-2 pr-2 text-right">{inr(rate)}</td>
+
+                <td className="py-2 pr-2 text-right">{Number.isFinite(qty) ? qty : "—"}</td>
+                <td className="py-2 pr-2 text-right">{inr(Number.isFinite(rate) ? rate : 0)}</td>
                 <td className="py-2 pl-2 text-right">{inr(amount)}</td>
               </tr>
             );
@@ -175,9 +187,7 @@ export default function InvoicePaper({
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Notes
               </div>
-              <div className="mt-1 whitespace-pre-line text-[11px] text-slate-700">
-                {notes}
-              </div>
+              <div className="mt-1 whitespace-pre-line text-[11px] text-slate-700">{notes}</div>
             </>
           ) : null}
         </div>
@@ -187,58 +197,44 @@ export default function InvoicePaper({
             <tbody>
               <tr>
                 <td className="py-1 pr-2 text-slate-600">Subtotal</td>
-                <td className="py-1 pl-2 text-right text-slate-900">
-                  {inr(t.subtotal || 0)}
-                </td>
+                <td className="py-1 pl-2 text-right text-slate-900">{inr(t.subtotal || 0)}</td>
               </tr>
 
               {hasDiscount ? (
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">Discount</td>
-                  <td className="py-1 pl-2 text-right text-slate-900">
-                    −{inr(discount)}
-                  </td>
+                  <td className="py-1 pl-2 text-right text-slate-900">−{inr(discount)}</td>
                 </tr>
               ) : null}
 
               <tr>
                 <td className="py-1 pr-2 text-slate-600">Taxable</td>
-                <td className="py-1 pl-2 text-right text-slate-900">
-                  {inr(t.taxableBase || 0)}
-                </td>
+                <td className="py-1 pl-2 text-right text-slate-900">{inr(t.taxableBase || 0)}</td>
               </tr>
 
               {(t.cgst || 0) > 0 ? (
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">CGST</td>
-                  <td className="py-1 pl-2 text-right text-slate-900">
-                    {inr(t.cgst || 0)}
-                  </td>
+                  <td className="py-1 pl-2 text-right text-slate-900">{inr(t.cgst || 0)}</td>
                 </tr>
               ) : null}
               {(t.sgst || 0) > 0 ? (
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">SGST</td>
-                  <td className="py-1 pl-2 text-right text-slate-900">
-                    {inr(t.sgst || 0)}
-                  </td>
+                  <td className="py-1 pl-2 text-right text-slate-900">{inr(t.sgst || 0)}</td>
                 </tr>
               ) : null}
               {(t.igst || 0) > 0 ? (
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">IGST</td>
-                  <td className="py-1 pl-2 text-right text-slate-900">
-                    {inr(t.igst || 0)}
-                  </td>
+                  <td className="py-1 pl-2 text-right text-slate-900">{inr(t.igst || 0)}</td>
                 </tr>
               ) : null}
 
               {(t.roundOff || 0) !== 0 ? (
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">Round off</td>
-                  <td className="py-1 pl-2 text-right text-slate-900">
-                    {inr(t.roundOff || 0)}
-                  </td>
+                  <td className="py-1 pl-2 text-right text-slate-900">{inr(t.roundOff || 0)}</td>
                 </tr>
               ) : null}
 

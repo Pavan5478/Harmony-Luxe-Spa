@@ -1,10 +1,42 @@
 // src/components/dashboard/DashboardKpis.tsx
+import Link from "next/link";
 import { inr } from "@/lib/format";
 
 function fmtChange(pct: number | null) {
   if (pct == null || !Number.isFinite(pct)) return "—";
   const sign = pct > 0 ? "+" : "";
   return `${sign}${pct.toFixed(1)}%`;
+}
+
+function ChangePill({ pct }: { pct: number | null }) {
+  if (pct == null || !Number.isFinite(pct)) {
+    return (
+      <span className="rounded-full bg-background px-2 py-0.5 text-[10px] sm:text-[11px]">
+        vs prev <span className="font-medium text-foreground">—</span>
+      </span>
+    );
+  }
+
+  const up = pct > 0;
+  const down = pct < 0;
+
+  const tone = up
+    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+    : down
+    ? "border-danger/30 bg-danger/10 text-danger"
+    : "border-border/60 bg-background text-muted";
+
+  return (
+    <span
+      className={[
+        "rounded-full px-2 py-0.5 text-[10px] sm:text-[11px]",
+        "border",
+        tone,
+      ].join(" ")}
+    >
+      vs prev <span className="font-semibold">{fmtChange(pct)}</span>
+    </span>
+  );
 }
 
 function MiniBars({
@@ -16,7 +48,7 @@ function MiniBars({
   if (!points.length) return null;
 
   return (
-    <div className="mt-3 min-w-0">
+    <div className="mt-3 min-w-0" role="img" aria-label="Revenue for last 7 days">
       <div className="flex h-9 items-end gap-1 sm:h-10 sm:gap-1.5">
         {points.map((p) => {
           const ratio = max > 0 ? p.total / max : 0;
@@ -26,12 +58,13 @@ function MiniBars({
             <div
               key={`${p.weekday}-${p.label}`}
               className="flex min-w-0 flex-1 flex-col items-center gap-1"
+              title={`${p.weekday} ${p.label}: ${inr(p.total)}`}
             >
               <div className="flex h-full w-full items-end justify-center rounded-full bg-muted/15">
                 <div
                   className="w-2 rounded-full bg-primary sm:w-2.5"
                   style={{ height: `${h}%` }}
-                  title={`${p.weekday} ${p.label}: ${inr(p.total)}`}
+                  aria-hidden
                 />
               </div>
               <div className="text-[9px] text-muted sm:text-[10px]">
@@ -43,6 +76,7 @@ function MiniBars({
           );
         })}
       </div>
+
       <div className="mt-1 text-[9px] text-muted sm:text-[10px]">
         Last 7 days (final invoices)
       </div>
@@ -57,6 +91,8 @@ function Card({
   sub,
   footer,
   children,
+  href,
+  ariaLabel,
 }: {
   title: string;
   right?: React.ReactNode;
@@ -64,20 +100,31 @@ function Card({
   sub?: React.ReactNode;
   footer?: React.ReactNode;
   children?: React.ReactNode;
+  href?: string;
+  ariaLabel?: string;
 }) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+  const baseCls = [
+    "min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5",
+    "transition",
+    href
+      ? "hover:bg-card/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      : "",
+  ].join(" ");
+
+  const inner = (
+    <>
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]">
+       <p className="min-w-0 whitespace-normal text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]">
           {title}
         </p>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
 
       <div className="mt-2 min-w-0">
-        <div className="truncate text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
-          {value}
-        </div>
+        <div className="tabular-nums whitespace-nowrap text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
+  {value}
+</div>
+
         {sub ? (
           <div className="mt-1 min-w-0 text-[10px] leading-snug text-muted sm:text-[11px]">
             {sub}
@@ -88,12 +135,20 @@ function Card({
       {children}
 
       {footer ? (
-        <div className="mt-3 min-w-0 text-[10px] leading-snug text-muted">
-          {footer}
-        </div>
+        <div className="mt-3 min-w-0 text-[10px] leading-snug text-muted">{footer}</div>
       ) : null}
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} prefetch={false} className={baseCls} aria-label={ariaLabel || title}>
+        {inner}
+      </Link>
+    );
+  }
+
+  return <div className={baseCls}>{inner}</div>;
 }
 
 export default function DashboardKpis(props: {
@@ -124,9 +179,19 @@ export default function DashboardKpis(props: {
   totalInvoices: number;
 
   last7Revenue: { label: string; weekday: string; total: number }[];
+
+  // ✅ NEW: optional drill-down links
+  links?: {
+    monthFinals?: string;
+    todayFinals?: string;
+    invoicesAll?: string;
+    expenses?: string;
+    customers?: string;
+  };
 }) {
   const {
     monthLabel,
+    todayLabel,
     monthRevenue,
     revenueChangePct,
     projectedRevenue,
@@ -146,15 +211,17 @@ export default function DashboardKpis(props: {
     finalizationRate,
     totalInvoices,
     last7Revenue,
+    links,
   } = props;
 
   const marginPct = monthRevenue > 0 ? (monthProfit / monthRevenue) * 100 : null;
 
   return (
-    <section className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-      {/* Revenue */}
+    <section className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-3">
       <Card
         title="Revenue (MTD)"
+        href={links?.monthFinals}
+        ariaLabel="Open final invoices for this month"
         right={
           <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted">
             {monthInvoiceCount} final
@@ -163,12 +230,7 @@ export default function DashboardKpis(props: {
         value={<span className="tabular-nums">{inr(monthRevenue)}</span>}
         sub={
           <span className="inline-flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-background px-2 py-0.5 text-[10px] sm:text-[11px]">
-              vs prev{" "}
-              <span className="font-medium text-foreground">
-                {fmtChange(revenueChangePct)}
-              </span>
-            </span>
+            <ChangePill pct={revenueChangePct} />
             <span className="rounded-full bg-background px-2 py-0.5 text-[10px] sm:text-[11px]">
               proj{" "}
               <span className="font-medium text-foreground tabular-nums">
@@ -181,9 +243,10 @@ export default function DashboardKpis(props: {
         <MiniBars points={last7Revenue} />
       </Card>
 
-      {/* Net / Profit */}
       <Card
         title="Net (MTD)"
+        href={links?.monthFinals}
+        ariaLabel="Open final invoices for this month"
         right={
           <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted">
             {marginPct == null ? "—" : `${marginPct.toFixed(0)}% margin`}
@@ -205,9 +268,10 @@ export default function DashboardKpis(props: {
         footer={<span className="text-[10px]">Month: {monthLabel}</span>}
       />
 
-      {/* Expenses */}
       <Card
         title="Expenses (MTD)"
+        href={links?.expenses}
+        ariaLabel="Open expenses"
         right={
           <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted">
             {expenseRatio == null ? "—" : `${expenseRatio.toFixed(1)}%`}
@@ -222,12 +286,13 @@ export default function DashboardKpis(props: {
             </span>
           </span>
         }
-        footer={<span className="text-[10px]">Track category spend below</span>}
+        footer={<span className="text-[10px]">Tap to manage expenses</span>}
       />
 
-      {/* Today */}
       <Card
-        title="Today revenue"
+        title={`Today revenue`}
+        href={links?.todayFinals}
+        ariaLabel="Open today final invoices"
         right={
           <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted">
             {todayCount} bills
@@ -252,11 +317,13 @@ export default function DashboardKpis(props: {
             </span>
           </>
         }
+        footer={<span className="text-[10px]">Day: {todayLabel}</span>}
       />
 
-      {/* Avg bill */}
       <Card
         title="Avg bill (MTD)"
+        href={links?.monthFinals}
+        ariaLabel="Open final invoices for this month"
         right={
           <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted">
             final only
@@ -267,31 +334,26 @@ export default function DashboardKpis(props: {
           <span className="inline-flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-background px-2 py-0.5 text-[10px] sm:text-[11px]">
               Final{" "}
-              <span className="font-medium text-foreground tabular-nums">
-                {finalCount}
-              </span>
+              <span className="font-medium text-foreground tabular-nums">{finalCount}</span>
             </span>
             <span className="rounded-full bg-background px-2 py-0.5 text-[10px] sm:text-[11px]">
               Draft{" "}
-              <span className="font-medium text-foreground tabular-nums">
-                {draftCount}
-              </span>
+              <span className="font-medium text-foreground tabular-nums">{draftCount}</span>
             </span>
             {voidCount > 0 ? (
               <span className="rounded-full bg-background px-2 py-0.5 text-[10px] sm:text-[11px]">
                 Void{" "}
-                <span className="font-medium text-foreground tabular-nums">
-                  {voidCount}
-                </span>
+                <span className="font-medium text-foreground tabular-nums">{voidCount}</span>
               </span>
             ) : null}
           </span>
         }
       />
 
-      {/* Customers */}
       <Card
         title="Customers (MTD)"
+        href={links?.customers || links?.monthFinals}
+        ariaLabel="Open invoices (customer drilldown)"
         right={
           <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted">
             {finalizationRate.toFixed(0)}% finalized
@@ -301,9 +363,7 @@ export default function DashboardKpis(props: {
         sub={
           <>
             Total bills{" "}
-            <span className="font-medium text-foreground tabular-nums">
-              {totalInvoices}
-            </span>
+            <span className="font-medium text-foreground tabular-nums">{totalInvoices}</span>
           </>
         }
         footer={<span className="text-[10px]">Unique named customers on final bills</span>}

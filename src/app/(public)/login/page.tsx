@@ -36,7 +36,7 @@ export default function LoginPage() {
   const [stage, setStage] = useState<"login" | "first">("login");
 
   const [selectedUser, setSelectedUser] = useState<PresetId>("CASHIER");
-  const [email, setEmail] = useState("cashier@harmoneyluxe.com");
+  const [email, setEmail] = useState("cashier@harmonyluxe.com");
 
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -147,7 +147,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background via-background to-background/90 px-4 text-foreground">
       <div className="w-full max-w-md">
-        <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/95 shadow-[0_18px_60px_rgba(0,0,0,0.6)] backdrop-blur">
+        <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/95 shadow-[0_2px_5px_rgba(0,0,0,0.2)] backdrop-blur">
           {/* Brand header – big logo only */}
 <header className="border-b border-border/60 bg-background/60 px-8 py-6">
   <div className="flex justify-center">
