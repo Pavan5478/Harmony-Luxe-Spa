@@ -1,3 +1,4 @@
+// src/components/invoice/InvoiceWorkspace.tsx
 "use client";
 
 import Link from "next/link";
@@ -14,6 +15,7 @@ export default function InvoiceWorkspace({
   children,
   idOrNo,
   printedAt,
+  printedAtLabel,
   status,
   autoPrint,
   backHref,
@@ -23,6 +25,7 @@ export default function InvoiceWorkspace({
   children: React.ReactNode;
   idOrNo: string;
   printedAt: string | null;
+  printedAtLabel?: string | null; // ✅ FIX for TS error
   status: Status;
   autoPrint?: boolean;
   backHref: string;
@@ -56,34 +59,34 @@ export default function InvoiceWorkspace({
   }, [status]);
 
   useEffect(() => {
-  const frame = frameRef.current;
-  const paper = paperRef.current;
-  if (!frame || !paper) return;
+    const frame = frameRef.current;
+    const paper = paperRef.current;
+    if (!frame || !paper) return;
 
-  const calc = () => {
-    const fw = frame.clientWidth;
-    const fh = frame.clientHeight;
-    const pw = paper.offsetWidth;
-    const ph = paper.offsetHeight;
-    if (!fw || !fh || !pw || !ph) return;
+    const calc = () => {
+      const fw = frame.clientWidth;
+      const fh = frame.clientHeight;
+      const pw = paper.offsetWidth; // untransformed size
+      const ph = paper.offsetHeight;
 
-    const nextFit = clamp(Math.min(fw / pw, fh / ph) * 0.98, 0.35, 1.25);
-    setFitScale(nextFit);
-  };
+      if (!fw || !fh || !pw || !ph) return;
 
-  calc();
+      const nextFit = clamp(Math.min(fw / pw, fh / ph) * 0.98, 0.28, 1.25);
+      setFitScale(nextFit);
+    };
 
-  // ✅ Prefer ResizeObserver if available
-  if (typeof ResizeObserver !== "undefined") {
-    const ro = new ResizeObserver(calc);
-    ro.observe(frame);
-    return () => ro.disconnect();
-  }
+    calc();
 
-  // ✅ Fallback
-  window.addEventListener("resize", calc);
-  return () => window.removeEventListener("resize", calc);
-}, []);
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(calc);
+      ro.observe(frame);
+      ro.observe(paper);
+      return () => ro.disconnect();
+    }
+
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
 
   useEffect(() => {
     if (mode === "fit") setScale(fitScale);
@@ -91,7 +94,7 @@ export default function InvoiceWorkspace({
 
   function setCustom(next: number) {
     setMode("custom");
-    setScale(clamp(next, 0.35, 1.5));
+    setScale(clamp(next, 0.28, 1.5));
   }
 
   function onFit() {
@@ -100,19 +103,32 @@ export default function InvoiceWorkspace({
   }
 
   const pct = Math.round(scale * 100);
+  const printedLabel =
+    printedAtLabel ?? (printedAt ? new Date(printedAt).toLocaleString() : null);
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        {/* LEFT: A4 preview */}
-        <section className="rounded-2xl border border-border bg-card/40 p-3 shadow-sm print:border-0 print:bg-transparent print:p-0 print:shadow-none lg:sticky lg:top-20 lg:h-[calc(100vh-7.5rem)]">
-          <div className="invoice-preview-frame h-full w-full overflow-hidden rounded-xl bg-background/70 p-3 print:overflow-visible print:rounded-none print:bg-transparent print:p-0">
-            <div ref={frameRef} className="h-full w-full overflow-hidden print:overflow-visible">
+    <div className="invoice-workspace-root mx-auto w-full max-w-7xl print:max-w-none">
+      {/* ✅ PRINT ONLY: render only paper */}
+      <div className="hidden print:block">
+        <div className="mx-auto w-full max-w-[210mm]">
+          {children}
+        </div>
+      </div>
+
+      {/* SCREEN MODE */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start print:hidden">
+        {/* LEFT: Preview */}
+        <section className="rounded-2xl border border-border bg-card/40 p-3 shadow-sm h-[calc(100svh-9rem)] lg:sticky lg:top-20 lg:h-[calc(100svh-7.5rem)]">
+          <div className="invoice-preview-frame h-full w-full overflow-hidden rounded-xl bg-background/70 p-3">
+            <div ref={frameRef} className="h-full w-full overflow-hidden">
               <div className="flex h-full w-full justify-center">
                 <div
                   ref={paperRef}
-                  className="invoice-scale origin-top scale-[var(--scale)] transform-gpu bg-white shadow-sm ring-1 ring-slate-200 print:scale-100 print:shadow-none print:ring-0"
-                  style={{ ["--scale" as any]: scale }}
+                  className="invoice-scale origin-top transform-gpu bg-white shadow-sm ring-1 ring-slate-200"
+                  style={{
+                    transform: `scale(${scale})`,
+                    transformOrigin: "top center",
+                  }}
                 >
                   {children}
                 </div>
@@ -122,7 +138,7 @@ export default function InvoiceWorkspace({
         </section>
 
         {/* RIGHT: Controls */}
-        <aside className="no-print rounded-2xl border border-border bg-card p-4 shadow-sm lg:sticky lg:top-20 lg:h-[calc(100vh-7.5rem)] lg:overflow-auto">
+        <aside className="rounded-2xl border border-border bg-card p-4 shadow-sm lg:sticky lg:top-20 lg:h-[calc(100svh-7.5rem)] lg:overflow-auto">
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -141,11 +157,21 @@ export default function InvoiceWorkspace({
               </span>
             </div>
 
+            {/* Better UX zoom */}
             <div className="rounded-xl border border-border bg-background/60 p-3">
               <div className="flex items-center justify-between">
                 <div className="text-[11px] font-semibold text-foreground">Preview</div>
                 <div className="text-[11px] text-muted">{pct}%</div>
               </div>
+
+              <input
+                className="mt-2 w-full"
+                type="range"
+                min={28}
+                max={150}
+                value={pct}
+                onChange={(e) => setCustom(Number(e.target.value) / 100)}
+              />
 
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
@@ -178,10 +204,8 @@ export default function InvoiceWorkspace({
                 </button>
               </div>
 
-              {printedAt ? (
-                <div className="mt-2 text-[11px] text-muted">
-                  Printed: {new Date(printedAt).toLocaleString()}
-                </div>
+              {printedLabel ? (
+                <div className="mt-2 text-[11px] text-muted">Printed: {printedLabel}</div>
               ) : null}
             </div>
 

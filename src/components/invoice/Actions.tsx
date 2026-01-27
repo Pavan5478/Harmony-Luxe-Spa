@@ -77,7 +77,11 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
     setLoading("PRINT");
     setMsg("Opening print…");
 
-    const title = `Invoice-${idOrNo}`;
+    // Create a safe filename for the PDF by replacing any characters that are not
+    // alphanumeric, dash, underscore or dot. Browsers use the document.title
+    // to suggest a filename when printing to PDF.
+    const safeId = idOrNo.replace(/[^a-zA-Z0-9\-_\.]+/g, "-");
+    const title = `Invoice-${safeId}`;
 
     const after = () => {
       if (!printedAt) safe(markPrintedOnServer(idOrNo));
@@ -122,7 +126,11 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
       const data = await res.json();
       const billNo: string = data?.bill?.billNo || data?.bill?.id || idOrNo;
 
-      const title = `Invoice-${billNo}`;
+      // Create a safe filename for the PDF by replacing any characters that are not
+      // alphanumeric, dash, underscore or dot. Use the finalized bill number (or id)
+      // as part of the document title so the exported PDF is meaningful.
+      const safeBillNo = String(billNo).replace(/[^a-zA-Z0-9\-_\.]+/g, "-");
+      const title = `Invoice-${safeBillNo}`;
       const after = () => {
         safe(markPrintedOnServer(billNo));
         router.replace(`/invoices/${encodeURIComponent(billNo)}?from=billing`);

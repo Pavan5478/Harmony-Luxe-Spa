@@ -1325,11 +1325,15 @@ export async function deleteExpenseFromSheet(id: string) {
   await sheets.spreadsheets.values.clear({ spreadsheetId, range });
 
   if (remaining.length) {
+    // Update the remaining rows. The `values` field expects an array of row arrays.
+    // `remaining` is already a 2D array (array of rows), so pass it directly rather than wrapping
+    // it in an extra array. Wrapping would nest the rows one level deeper and cause the data to be
+    // written incorrectly (all remaining rows would appear on a single row).
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range,
       valueInputOption: "USER_ENTERED",
-      requestBody: { values: [remaining] },
+      requestBody: { values: remaining },
     });
   }
 

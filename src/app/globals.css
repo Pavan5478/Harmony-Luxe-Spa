@@ -464,59 +464,69 @@ a:hover {
 @media print {
   @page {
     size: A4;
-    margin: 8mm 10mm 12mm 10mm;
+    margin: 0;
   }
 
   html,
-  body,
-  .app-shell,
-  .app-main {
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .bg-background,
-  .bg-card,
-  .bg-muted,
-  .bg-slate-900,
-  .bg-slate-950,
-  .bg-black {
-    background-color: #ffffff !important;
+  /* ✅ Avoid full-bleed negative margins creating overflow */
+  .full-bleed {
+    width: auto !important;
+    margin: 0 !important;
+  }
+
+  .invoice-shell {
+    background: transparent !important;
   }
 
   .no-print {
     display: none !important;
   }
 
-  .app-main {
+  /* kill any fixed heights/scroll containers */
+  .invoice-workspace-root,
+  .invoice-preview-frame {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
     padding: 0 !important;
-  }
-
-  .invoice-shell {
-    padding: 0 !important;
-    margin: 0 !important;
-    max-width: none !important;
-    background: #ffffff !important;
-  }
-
-  .invoice-print {
+    border: 0 !important;
     box-shadow: none !important;
-    border-radius: 0 !important;
-    max-width: none !important;
-    width: 100% !important;
-    padding: 0 !important;
   }
 
-  .full-bleed {
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-  }
-
+  /* transforms can cause crop/extra pages */
   .invoice-scale {
-    --scale: 1 !important;
+    transform: none !important;
+  }
+
+  /* invoice paper target (now present as class) */
+  .invoice-paper {
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  /* ✅ Don’t block breaking on the whole table (causes blank/extra pages) */
+  table {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  tr,
+  td,
+  th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
 

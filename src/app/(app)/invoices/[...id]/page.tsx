@@ -1,3 +1,4 @@
+// src/app/(app)/invoices/[...id]/page.tsx
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { getBill } from "@/store/bills";
@@ -10,6 +11,35 @@ type PageProps = {
 };
 
 export const dynamic = "force-dynamic";
+
+function formatPrintedAt(iso: string) {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function formatBillDate(d: Date) {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }).format(d);
+  } catch {
+    return d.toLocaleDateString();
+  }
+}
 
 export default async function InvoicePage(props: PageProps) {
   const session = await getSession();
@@ -35,6 +65,8 @@ export default async function InvoicePage(props: PageProps) {
     (bill.status as "DRAFT" | "FINAL" | "VOID") || "FINAL";
 
   const printedAt: string | null = bill.printedAt || null;
+  const printedAtLabel: string | null = printedAt ? formatPrintedAt(printedAt) : null;
+
   const idOrNo: string = (bill.billNo as string) || (bill.id as string) || key;
 
   const backHref =
@@ -52,13 +84,14 @@ export default async function InvoicePage(props: PageProps) {
   const spaEmail = "harmonyluxetherapy@gmail.com";
 
   const billNoLabel = String(bill.billNo || bill.id || key || "—");
-  const billDateLabel = billDate.toLocaleDateString();
+  const billDateLabel = formatBillDate(billDate);
 
   return (
-    <div className="invoice-shell full-bleed px-4 py-4 sm:px-6 lg:px-8">
+    <div className="invoice-shell full-bleed px-4 py-4 sm:px-6 lg:px-8 print:p-0 print:px-0 print:py-0 print:bg-white">
       <InvoiceWorkspace
         idOrNo={idOrNo}
         printedAt={printedAt}
+        printedAtLabel={printedAtLabel} // ✅ now valid
         status={status}
         autoPrint={autoPrint && status === "FINAL"}
         backHref={backHref}

@@ -1,3 +1,4 @@
+// src/components/invoice/InvoicePaper.tsx
 import Image from "next/image";
 import { inr } from "@/lib/format";
 
@@ -27,11 +28,24 @@ export default function InvoicePaper({
   const hasNotes = notes.length > 0;
 
   const billNo = String(bill.billNo || bill.id || "").trim() || "—";
-  const dateStr = billDate.toLocaleDateString();
+
+  const dateStr = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(billDate);
 
   return (
-    <div className="w-[210mm] min-h-[297mm] bg-white p-[12mm] text-slate-900">
-      {/* Top row: logo left, bill+date right */}
+    <div
+      className={[
+        "invoice-paper mx-auto bg-white p-[2mm] text-slate-900",
+        "w-full max-w-[210mm]",
+        "min-h-[297mm] print:min-h-0", // ✅ preview shows full page, print doesn't force it
+        "print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]",
+      ].join(" ")}
+    >
+      {/* Header */}
       <div className="flex items-start justify-between gap-6">
         <div className="flex items-center gap-3">
           <Image
@@ -55,7 +69,7 @@ export default function InvoicePaper({
         </div>
       </div>
 
-      {/* Second row: spa details left, customer+payment right */}
+      {/* Details */}
       <div className="mt-3 grid grid-cols-2 gap-6">
         <div>
           <div className="text-base font-semibold text-slate-900">{spaName}</div>
@@ -114,7 +128,7 @@ export default function InvoicePaper({
 
       <div className="mt-4 h-px bg-slate-200" />
 
-      {/* Items table */}
+      {/* Items */}
       <table className="mt-3 w-full border-collapse text-[11px]">
         <thead>
           <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
@@ -241,7 +255,7 @@ export default function InvoicePaper({
         </div>
       </div>
 
-      {/* Footer row (compact). Signature line removed. */}
+      {/* Footer */}
       <div className="mt-4 border-t border-slate-200 pt-2 text-[10px] text-slate-500">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
