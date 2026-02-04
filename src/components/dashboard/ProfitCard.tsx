@@ -40,9 +40,7 @@ function fmtAxisINR(v: number) {
   return `₹${Math.round(n)}`;
 }
 
-/**
- * Smooth line using Catmull-Rom -> Bezier
- */
+/** Smooth line using Catmull-Rom -> Bezier */
 function smoothSegments(pts: { x: number; y: number }[]) {
   if (pts.length < 2) return "";
   const segs: string[] = [];
@@ -64,6 +62,40 @@ function smoothSegments(pts: { x: number; y: number }[]) {
     );
   }
   return segs.join(" ");
+}
+
+function toneText(v: number) {
+  if (v > 0) return "text-emerald-600 dark:text-emerald-400";
+  if (v < 0) return "text-destructive";
+  return "text-foreground";
+}
+
+function tonePill(v: number) {
+  if (v > 0) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+  if (v < 0) return "bg-destructive/15 text-destructive";
+  return "bg-muted/40 text-muted-foreground";
+}
+
+function StatPill({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-[10px] text-muted-foreground",
+        className,
+      ].join(" ")}
+    >
+      <span className="opacity-80">{label}</span>
+      <span className="font-semibold tabular-nums text-foreground">{value}</span>
+    </span>
+  );
 }
 
 export default function ProfitCard({
@@ -98,12 +130,17 @@ export default function ProfitCard({
       data[0] ?? { label: "", weekday: "", revenue: 0, expenses: 0, net: 0 }
     );
 
+    const avg = data.length
+      ? data.reduce((s, d) => s + (Number(d.net) || 0), 0) / data.length
+      : 0;
+
     return {
       maxAbs,
       hasAny: maxAbs > 0,
       zeroDays,
       best: data.length ? best : null,
       worst: data.length ? worst : null,
+      avg,
     };
   }, [data]);
 
@@ -125,17 +162,13 @@ export default function ProfitCard({
     const n = Math.max(1, data.length);
     return data.map((d, i) => {
       const x = M.l + (n === 1 ? 0 : (i / (n - 1)) * iw);
-      // map net to y, with 0 at middle
       const r = yMax > 0 ? clamp((Number(d.net) || 0) / yMax, -1, 1) : 0;
-      const y = M.t + (1 - (r + 1) / 2) * ih; // r=-1 -> bottom, r=+1 -> top
+      const y = M.t + (1 - (r + 1) / 2) * ih;
       return { ...d, x, y };
     });
   }, [data, iw, ih, yMax]);
 
-  const midY = useMemo(() => {
-    // y where net = 0
-    return M.t + ih / 2;
-  }, [ih]);
+  const midY = useMemo(() => M.t + ih / 2, [ih]);
 
   const linePath = useMemo(() => {
     if (!pts.length) return "";
@@ -143,18 +176,12 @@ export default function ProfitCard({
     return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)} ${seg}`;
   }, [pts]);
 
-  // Build area paths: split into profit (above mid) and loss (below mid)
   function buildAreaPath(sign: "pos" | "neg") {
     if (!pts.length) return "";
     const filtered = pts.map((p) => {
       const isPos = (Number(p.net) || 0) >= 0;
       const take = sign === "pos" ? isPos : !isPos;
-
-      // if not take, clamp point to baseline (midY) to avoid weird fill
-      return {
-        x: p.x,
-        y: take ? p.y : midY,
-      };
+      return { x: p.x, y: take ? p.y : midY };
     });
 
     const seg = smoothSegments(filtered);
@@ -163,9 +190,7 @@ export default function ProfitCard({
 
     return `M ${first.x.toFixed(2)} ${midY.toFixed(2)} L ${first.x.toFixed(
       2
-    )} ${first.y.toFixed(2)} ${seg} L ${last.x.toFixed(2)} ${midY.toFixed(
-      2
-    )} Z`;
+    )} ${first.y.toFixed(2)} ${seg} L ${last.x.toFixed(2)} ${midY.toFixed(2)} Z`;
   }
 
   const areaPos = useMemo(() => buildAreaPath("pos"), [pts, midY]);
@@ -215,128 +240,189 @@ export default function ProfitCard({
     return { prev, diff };
   }, [activeIdx, pts]);
 
-  const monthTone =
-    monthProfit > 0 ? "text-emerald-400" : monthProfit < 0 ? "text-danger" : "text-foreground";
-  const todayTone =
-    todayProfit > 0 ? "text-emerald-400" : todayProfit < 0 ? "text-danger" : "text-foreground";
-
   return (
-    <section className="min-w-0 rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5 sm:py-5">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+    <section className="min-w-0 rounded-2xl border border-border bg-card px-4 py-4 text-card-foreground shadow-sm sm:px-5 sm:py-5">
+      {/* Header (match other cards style) */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="min-w-0 text-sm font-semibold text-foreground sm:text-base">
-            Net (revenue − expenses)
-          </h2>
-          <p className="mt-1 text-[11px] text-muted">
-            Last 7 days • revenue vs expenses daily net
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-foreground sm:text-base">
+              Net (revenue − expenses)
+            </h2>
+            <span className="rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[10px] font-medium text-foreground">
+              {monthLabel}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Last 7 days • hover/tap points for revenue/expense breakdown
           </p>
         </div>
 
-        <span className="w-fit rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-          {monthLabel}
-        </span>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <span className={`rounded-full px-2.5 py-1 text-[10px] ${tonePill(monthProfit)}`}>
+            Month: <span className={`font-semibold tabular-nums ${toneText(monthProfit)}`}>{inr(monthProfit)}</span>
+          </span>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] ${tonePill(todayProfit)}`}>
+            Today: <span className={`font-semibold tabular-nums ${toneText(todayProfit)}`}>{inr(todayProfit)}</span>
+          </span>
+        </div>
       </div>
 
-      {/* Summary row */}
+      {/* Summary (no heavy grey blocks) */}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-border bg-background/60 p-3">
-          <div className="text-[11px] text-muted">Month net</div>
-          <div className={["mt-1 text-xl font-semibold tabular-nums", monthTone].join(" ")}>
-            {inr(monthProfit)}
+        {/* Month panel */}
+        <div className="rounded-2xl border border-border/60 bg-muted/10 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] text-muted-foreground">Month net</div>
+              <div className={`mt-1 text-xl font-semibold tabular-nums ${toneText(monthProfit)}`}>
+                {inr(monthProfit)}
+              </div>
+            </div>
+
+            <div className="text-right text-[11px] text-muted-foreground">
+              <div>
+                Rev <span className="font-medium text-foreground tabular-nums">{inr(monthRevenue)}</span>
+              </div>
+              <div>
+                Exp{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {inr(monthExpensesTotal)}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted">
-            <span className="rounded-full bg-background px-2 py-1">
-              Margin{" "}
-              <span className="font-medium text-foreground">
-                {marginPct == null ? "—" : `${marginPct.toFixed(0)}%`}
-              </span>
-            </span>
-            <span className="rounded-full bg-background px-2 py-1">
-              Spend{" "}
-              <span className="font-medium text-foreground">
-                {burnPct == null ? "—" : `${burnPct.toFixed(1)}%`}
-              </span>
-            </span>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatPill
+              label="Margin"
+              value={marginPct == null ? "—" : `${marginPct.toFixed(0)}%`}
+            />
+            <StatPill
+              label="Spend"
+              value={burnPct == null ? "—" : `${burnPct.toFixed(1)}%`}
+            />
           </div>
 
-          <div className="mt-2 text-[11px] text-muted">
-            Rev{" "}
-            <span className="font-medium text-foreground tabular-nums">{inr(monthRevenue)}</span>{" "}
-            • Exp{" "}
-            <span className="font-medium text-foreground tabular-nums">{inr(monthExpensesTotal)}</span>
+          {/* subtle bars (not loud in dark mode) */}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-xl border border-border/60 bg-card px-2.5 py-2">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>Margin</span>
+                <span className="font-medium text-foreground tabular-nums">
+                  {marginPct == null ? "—" : `${marginPct.toFixed(0)}%`}
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
+                <div
+                  className="h-full bg-emerald-500/70"
+                  style={{ width: `${clamp(marginPct ?? 0, 0, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-card px-2.5 py-2">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>Spend</span>
+                <span className="font-medium text-foreground tabular-nums">
+                  {burnPct == null ? "—" : `${burnPct.toFixed(1)}%`}
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
+                <div
+                  className="h-full bg-destructive/60"
+                  style={{ width: `${clamp(burnPct ?? 0, 0, 100)}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-background/60 p-3">
-          <div className="text-[11px] text-muted">Today</div>
-          <div className={["mt-1 text-xl font-semibold tabular-nums", todayTone].join(" ")}>
-            {inr(todayProfit)}
-          </div>
-          <div className="mt-1 text-[11px] text-muted">
-            Expenses{" "}
-            <span className="font-medium text-foreground tabular-nums">{inr(todayExpensesTotal)}</span>
+        {/* Today panel */}
+        <div className="rounded-2xl border border-border/60 bg-muted/10 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] text-muted-foreground">Today</div>
+              <div className={`mt-1 text-xl font-semibold tabular-nums ${toneText(todayProfit)}`}>
+                {inr(todayProfit)}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Expenses{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {inr(todayExpensesTotal)}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-right text-[11px] text-muted-foreground">
+              <div>
+                Avg (7d){" "}
+                <span className={`font-semibold tabular-nums ${toneText(stats.avg)}`}>
+                  {inr(stats.avg)}
+                </span>
+              </div>
+              {stats.zeroDays > 0 ? <div>{stats.zeroDays} zero day(s)</div> : <div>&nbsp;</div>}
+            </div>
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
             {stats.best ? (
-              <span className="rounded-full bg-background px-2 py-1">
+              <span className="rounded-full border border-border/60 bg-card px-2.5 py-1">
                 Best{" "}
-                <span className="font-medium text-foreground tabular-nums">
+                <span className={`font-semibold tabular-nums ${toneText(stats.best.net)}`}>
                   {inr(stats.best.net)}
                 </span>{" "}
-                <span className="text-muted">({stats.best.weekday} {stats.best.label})</span>
+                <span className="opacity-80">
+                  ({stats.best.weekday} {stats.best.label})
+                </span>
               </span>
             ) : null}
             {stats.worst ? (
-              <span className="rounded-full bg-background px-2 py-1">
+              <span className="rounded-full border border-border/60 bg-card px-2.5 py-1">
                 Worst{" "}
-                <span className="font-medium text-foreground tabular-nums">
+                <span className={`font-semibold tabular-nums ${toneText(stats.worst.net)}`}>
                   {inr(stats.worst.net)}
                 </span>{" "}
-                <span className="text-muted">({stats.worst.weekday} {stats.worst.label})</span>
+                <span className="opacity-80">
+                  ({stats.worst.weekday} {stats.worst.label})
+                </span>
               </span>
             ) : null}
           </div>
         </div>
       </div>
 
+      {/* Chart */}
       {!stats.hasAny ? (
-        <div className="mt-4 rounded-xl border border-dashed border-border bg-background/40 px-3 py-3 text-[11px] text-muted">
+        <div className="mt-4 rounded-2xl border border-dashed border-border bg-muted/10 px-3 py-3 text-[11px] text-muted-foreground">
           Not enough data to show the last 7 days net trend yet.
         </div>
       ) : (
         <div className="mt-4 min-w-0">
           <div
             ref={wrapRef}
-            className="relative rounded-xl bg-background/40 ring-1 ring-border/60 px-2 py-3"
-            onMouseLeave={clearTip}
+            className="relative rounded-2xl border border-border/60 bg-card p-2 ring-1 ring-border/30"
+            onPointerLeave={clearTip}
           >
             {/* Tooltip */}
             {active && tip ? (
               <div
-                className="pointer-events-none absolute z-10 min-w-[220px] rounded-xl border border-border bg-card/95 px-3 py-2 text-[11px] shadow-md"
+                className="pointer-events-none absolute z-10 min-w-[230px] rounded-2xl border border-border bg-card px-3 py-2 text-[11px] shadow-lg"
                 style={{
-                  left: clamp(tip.x + 12, 8, (wrapRef.current?.clientWidth || 0) - 240),
-                  top: clamp(tip.y - 48, 8, (wrapRef.current?.clientHeight || 0) - 86),
+                  left: clamp(tip.x + 12, 10, (wrapRef.current?.clientWidth || 0) - 250),
+                  top: clamp(tip.y - 54, 10, (wrapRef.current?.clientHeight || 0) - 92),
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-semibold text-foreground">
                     {active.weekday} {active.label}
                   </div>
-                  <div
-                    className={[
-                      "tabular-nums font-semibold",
-                      active.net >= 0 ? "text-emerald-400" : "text-danger",
-                    ].join(" ")}
-                  >
+                  <div className={`tabular-nums font-semibold ${toneText(active.net)}`}>
                     {inr(active.net)}
                   </div>
                 </div>
 
-                <div className="mt-1 text-muted">
+                <div className="mt-1 text-muted-foreground">
                   Rev{" "}
                   <span className="font-medium text-foreground tabular-nums">
                     {inr(active.revenue)}
@@ -348,15 +434,15 @@ export default function ProfitCard({
                 </div>
 
                 {activeDelta ? (
-                  <div className="mt-1 text-muted">
+                  <div className="mt-1 text-muted-foreground">
                     vs prev:{" "}
                     <span
                       className={[
                         "font-semibold tabular-nums",
                         activeDelta.diff > 0
-                          ? "text-emerald-400"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : activeDelta.diff < 0
-                          ? "text-danger"
+                          ? "text-destructive"
                           : "text-foreground",
                       ].join(" ")}
                     >
@@ -370,21 +456,21 @@ export default function ProfitCard({
 
             <svg
               viewBox={`0 0 ${W} ${H}`}
-              className="h-[240px] w-full"
+              className="h-[240px] w-full touch-none"
               role="img"
               aria-label="Net trend chart"
-              onMouseMove={(e) => pickNearest(e.clientX)}
-              onTouchStart={(e) => pickNearest(e.touches[0]?.clientX || 0)}
-              onTouchMove={(e) => pickNearest(e.touches[0]?.clientX || 0)}
+              onPointerMove={(e) => pickNearest(e.clientX)}
+              onPointerDown={(e) => pickNearest(e.clientX)}
             >
               <defs>
+                {/* IMPORTANT: use emerald/red for profit/loss (not theme primary which is gold in your UI) */}
                 <linearGradient id="netPos" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.02" />
+                  <stop offset="0%" stopColor="rgb(16 185 129)" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="rgb(16 185 129)" stopOpacity="0.03" />
                 </linearGradient>
                 <linearGradient id="netNeg" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity="0.02" />
-                  <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity="0.16" />
+                  <stop offset="0%" stopColor="rgb(239 68 68)" stopOpacity="0.04" />
+                  <stop offset="100%" stopColor="rgb(239 68 68)" stopOpacity="0.20" />
                 </linearGradient>
               </defs>
 
@@ -403,7 +489,7 @@ export default function ProfitCard({
                         y1={y}
                         y2={y}
                         stroke="currentColor"
-                        opacity={isZero ? 0.35 : 0.18}
+                        opacity={isZero ? 0.35 : 0.16}
                       />
                       <text
                         x={M.l - 10}
@@ -449,15 +535,19 @@ export default function ProfitCard({
                 const isActive = i === activeIdx;
                 const showX = i === 0 || i === pts.length - 1 || i % 2 === 0;
 
+                const posStroke = "rgb(16 185 129)";
+                const negStroke = "rgb(239 68 68)";
+
                 return (
                   <g key={`${p.weekday}-${p.label}-${i}`}>
                     <circle
                       cx={p.x}
                       cy={p.y}
-                      r={isActive ? 5 : 4}
-                      fill="hsl(var(--background))"
-                      stroke={p.net >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
+                      r={isActive ? 5.5 : 4}
+                      fill="hsl(var(--card))"
+                      stroke={p.net >= 0 ? posStroke : negStroke}
                       strokeWidth={isActive ? 3 : 2}
+                      opacity={isActive ? 1 : 0.95}
                     />
                     {showX ? (
                       <text
@@ -475,14 +565,15 @@ export default function ProfitCard({
               })}
             </svg>
 
-            <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-muted">
+            <div className="mt-2 flex items-center justify-between gap-2 px-1 text-[10px] text-muted-foreground">
               <span>
-                Axis max: <span className="font-medium text-foreground">{fmtAxisINR(yMax)}</span>
+                Axis max:{" "}
+                <span className="font-medium text-foreground tabular-nums">{fmtAxisINR(yMax)}</span>
               </span>
-              <span className="hidden sm:inline">Hover (or tap) points to see breakdown</span>
+              <span className="hidden sm:inline">Hover (or tap) to inspect points</span>
               <button
                 type="button"
-                className="sm:hidden rounded-full border border-border bg-background px-2 py-1"
+                className="sm:hidden rounded-full border border-border bg-card px-2 py-1 text-foreground"
                 onClick={clearTip}
               >
                 Clear
@@ -490,13 +581,13 @@ export default function ProfitCard({
             </div>
 
             {/* Legend */}
-            <div className="mt-2 flex flex-wrap justify-center gap-4 text-[10px] text-muted">
+            <div className="mt-2 flex flex-wrap justify-center gap-4 text-[10px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-full bg-primary" />
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                 Profit
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-full bg-[hsl(var(--destructive))]" />
+                <span className="inline-block h-2 w-2 rounded-full bg-destructive" />
                 Loss
               </span>
               {stats.zeroDays > 0 ? (

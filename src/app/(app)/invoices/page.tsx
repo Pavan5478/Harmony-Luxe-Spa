@@ -8,8 +8,9 @@ import InvoicesFiltersBar from "@/components/invoice/InvoicesFiltersBar";
 type SP = {
   q?: string;
   from?: string; // usually YYYY-MM-DD
-  to?: string;   // usually YYYY-MM-DD
+  to?: string; // usually YYYY-MM-DD
   status?: "FINAL" | "DRAFT" | "VOID" | "ALL";
+  page?: string; // NEW
 };
 
 type RowStatus = "FINAL" | "DRAFT" | "VOID";
@@ -82,28 +83,150 @@ function normalizeStatus(raw: unknown, billNo?: string): RowStatus {
 }
 
 function StatusBadge({ s }: { s: RowStatus }) {
-  const base = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium";
+  // Use theme tokens (looks consistent in light/dark)
+  const base =
+    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border";
+
   if (s === "FINAL") {
     return (
-      <span className={`${base} border border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}>
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+      <span className={`${base} border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300`}>
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
         Final
       </span>
     );
   }
   if (s === "VOID") {
     return (
-      <span className={`${base} border border-danger/40 bg-danger/10 text-danger`}>
-        <span className="h-1.5 w-1.5 rounded-full bg-danger" />
+      <span className={`${base} border-destructive/40 bg-destructive/10 text-destructive`}>
+        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
         Void
       </span>
     );
   }
   return (
-    <span className={`${base} border border-amber-500/30 bg-amber-500/10 text-amber-300`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+    <span className={`${base} border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
       Draft
     </span>
+  );
+}
+
+/** Build query string preserving existing filters */
+function buildHrefWithSP(
+  sp: Record<string, string | undefined>,
+  patch: Record<string, string | undefined>
+) {
+  const params = new URLSearchParams();
+  const merged = { ...sp, ...patch };
+
+  Object.entries(merged).forEach(([k, v]) => {
+    const s = String(v ?? "").trim();
+    if (!s) return;
+    params.set(k, s);
+  });
+
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function Pagination({
+  baseSP,
+  page,
+  totalPages,
+  totalItems,
+  pageSize,
+}: {
+  baseSP: Record<string, string | undefined>;
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+}) {
+  if (totalPages <= 1) return null;
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(totalItems, page * pageSize);
+
+  // windowed pages: 1 ... (p-2) (p-1) p (p+1) (p+2) ... total
+  const window = 2;
+  const pages: (number | "dots")[] = [];
+
+  const push = (x: number | "dots") => {
+    if (pages.length && pages[pages.length - 1] === x) return;
+    pages.push(x);
+  };
+
+  const left = Math.max(1, page - window);
+  const right = Math.min(totalPages, page + window);
+
+  push(1);
+  if (left > 2) push("dots");
+
+  for (let p = left; p <= right; p++) {
+    if (p !== 1 && p !== totalPages) push(p);
+  }
+
+  if (right < totalPages - 1) push("dots");
+  if (totalPages > 1) push(totalPages);
+
+  const btnBase =
+    "inline-flex h-8 min-w-8 items-center justify-center rounded-full border px-2 text-[12px] font-medium transition";
+  const btn =
+    `${btnBase} border-border bg-background hover:bg-card text-foreground`;
+  const btnActive =
+    `${btnBase} border-primary/30 bg-primary/10 text-primary`;
+  const btnDisabled =
+    `${btnBase} border-border/50 bg-muted/30 text-muted-foreground pointer-events-none opacity-60`;
+
+  const prevHref = buildHrefWithSP(baseSP, { page: String(Math.max(1, page - 1)) });
+  const nextHref = buildHrefWithSP(baseSP, { page: String(Math.min(totalPages, page + 1)) });
+
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-xl bg-background/40 p-3 ring-1 ring-border/60 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-[11px] text-muted-foreground">
+        Showing <span className="font-medium text-foreground">{start}</span>–
+        <span className="font-medium text-foreground">{end}</span> of{" "}
+        <span className="font-medium text-foreground">{totalItems}</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Link
+          prefetch={false}
+          href={prevHref}
+          className={page <= 1 ? btnDisabled : btn}
+          aria-disabled={page <= 1}
+        >
+          Prev
+        </Link>
+
+        {pages.map((p, idx) =>
+          p === "dots" ? (
+            <span key={`dots-${idx}`} className="px-2 text-[12px] text-muted-foreground">
+              …
+            </span>
+          ) : (
+            <Link
+              key={p}
+              prefetch={false}
+              href={buildHrefWithSP(baseSP, { page: String(p) })}
+              className={p === page ? btnActive : btn}
+              aria-current={p === page ? "page" : undefined}
+            >
+              {p}
+            </Link>
+          )
+        )}
+
+        <Link
+          prefetch={false}
+          href={nextHref}
+          className={page >= totalPages ? btnDisabled : btn}
+          aria-disabled={page >= totalPages}
+        >
+          Next
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -116,14 +239,17 @@ export default async function InvoicesListPage({
   const q = (sp.q || "").trim().toLowerCase();
   const status = (sp.status || "ALL") as SP["status"];
 
+  // Pagination config
+  const PAGE_SIZE = 15;
+  const page = Math.max(1, Number.parseInt(String(sp.page || "1"), 10) || 1);
+
   // Filters: treat from/to as IST local days when input is YYYY-MM-DD
   const fromStart = parseDateInputToTs(sp.from);
   const toStart = parseDateInputToTs(sp.to);
 
   const fromTs = Number.isFinite(fromStart) ? fromStart : Number.NEGATIVE_INFINITY;
   // end-exclusive: include the whole "to" day
-  const toTs =
-    Number.isFinite(toStart) ? toStart + DAY_MS : Number.POSITIVE_INFINITY;
+  const toTs = Number.isFinite(toStart) ? toStart + DAY_MS : Number.POSITIVE_INFINITY;
 
   const session = await getSession();
   const role = session.user?.role;
@@ -160,7 +286,7 @@ export default async function InvoicesListPage({
     })
     .filter(Boolean) as Row[];
 
-  const filtered = rows
+  const filteredAll = rows
     .filter((r) => {
       if (!(r.ts >= fromTs && r.ts < toTs)) return false;
       if (status !== "ALL" && r.status !== status) return false;
@@ -169,6 +295,15 @@ export default async function InvoicesListPage({
       return hay.includes(q);
     })
     .sort((a, b) => b.ts - a.ts);
+
+  // Pagination slice
+  const totalItems = filteredAll.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+
+  const startIdx = (safePage - 1) * PAGE_SIZE;
+  const endIdx = startIdx + PAGE_SIZE;
+  const filtered = filteredAll.slice(startIdx, endIdx);
 
   const dtDate = new Intl.DateTimeFormat("en-IN", {
     timeZone: IST_TZ,
@@ -182,6 +317,15 @@ export default async function InvoicesListPage({
     minute: "2-digit",
   });
 
+  // baseSP for pagination links (preserve filters)
+  const baseSP: Record<string, string | undefined> = {
+    q: sp.q || "",
+    from: sp.from || "",
+    to: sp.to || "",
+    status: (status || "ALL") as any,
+    // page will be added by Pagination
+  };
+
   return (
     <div className="min-w-0 space-y-3 pb-24 lg:space-y-4 lg:pb-0">
       <InvoicesFiltersBar
@@ -190,105 +334,121 @@ export default async function InvoicesListPage({
         initialTo={sp.to || ""}
         initialStatus={(status || "ALL") as any}
         canExport={canExport}
-        count={filtered.length}
+        count={filteredAll.length} // show total matching count, not just current page
       />
 
       <section className="min-w-0">
-        {filtered.length === 0 ? (
-          <div className="rounded-xl bg-background/70 p-4 text-center text-xs text-muted sm:text-sm">
+        {filteredAll.length === 0 ? (
+          <div className="rounded-xl bg-background/70 p-4 text-center text-xs text-muted-foreground sm:text-sm">
             No invoices match your filters.
           </div>
         ) : (
-          <div className="min-w-0 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
-            <div className="divide-y divide-border/40">
-              {filtered.map((r) => {
-                const dateObj = new Date(r.ts);
-                const isValid = !Number.isNaN(dateObj.getTime());
-                const dateStr = isValid ? dtDate.format(dateObj) : "—";
-                const timeStr = isValid ? dtTime.format(dateObj) : "";
+          <>
+            <div className="min-w-0 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
+              <div className="divide-y divide-border/40">
+                {filtered.map((r) => {
+                  const dateObj = new Date(r.ts);
+                  const isValid = !Number.isNaN(dateObj.getTime());
+                  const dateStr = isValid ? dtDate.format(dateObj) : "—";
+                  const timeStr = isValid ? dtTime.format(dateObj) : "";
 
-                const label = r.billNo || r.id || r.key;
-                const viewHref = `/invoices/${encodeURIComponent(r.key)}`;
-                const printHref = `/invoices/${encodeURIComponent(r.key)}?print=1`;
+                  const label = r.billNo || r.id || r.key;
+                  const viewHref = `/invoices/${encodeURIComponent(r.key)}`;
+                  const printHref = `/invoices/${encodeURIComponent(r.key)}?print=1`;
 
-                return (
-                  <div key={r.key} className="px-3 py-2.5 transition hover:bg-card/90 sm:px-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={viewHref}
-                            prefetch={false}
-                            className="truncate text-sm font-semibold text-foreground hover:text-primary hover:no-underline"
-                            title={label}
-                          >
-                            {label}
-                          </Link>
-                          <StatusBadge s={r.status} />
-                        </div>
-
-                        <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-muted">
-                          <span className="truncate">{r.customer || "Walk-in customer"}</span>
-                          <span className="hidden sm:inline">•</span>
-                          <span>
-                            {dateStr}
-                            {timeStr ? `, ${timeStr}` : ""}
-                          </span>
-                          {r.cashier ? (
-                            <>
-                              <span className="hidden sm:inline">•</span>
-                              <span className="truncate">Cashier: {r.cashier}</span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
-                        <div className="text-sm font-semibold text-foreground tabular-nums">
-                          {inr(r.amount)}
-                        </div>
-
-                        <div className="flex flex-wrap justify-end gap-1 text-[11px]">
-                          <Link
-                            href={viewHref}
-                            prefetch={false}
-                            className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
-                          >
-                            View
-                          </Link>
-
-                          {/* Print only for FINAL */}
-                          {r.status === "FINAL" ? (
+                  return (
+                    <div
+                      key={r.key}
+                      className="px-3 py-2.5 transition hover:bg-card/90 sm:px-4"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Link
-                              href={printHref}
+                              href={viewHref}
                               prefetch={false}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
+                              className="truncate text-sm font-semibold text-foreground hover:text-primary hover:no-underline"
+                              title={label}
                             >
-                              Print
+                              {label}
                             </Link>
-                          ) : null}
+                            <StatusBadge s={r.status} />
+                          </div>
 
-                          {canEdit && r.status === "DRAFT" ? (
+                          <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                            <span className="truncate">
+                              {r.customer || "Walk-in customer"}
+                            </span>
+                            <span className="hidden sm:inline">•</span>
+                            <span>
+                              {dateStr}
+                              {timeStr ? `, ${timeStr}` : ""}
+                            </span>
+                            {r.cashier ? (
+                              <>
+                                <span className="hidden sm:inline">•</span>
+                                <span className="truncate">Cashier: {r.cashier}</span>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
+                          <div className="text-sm font-semibold text-foreground tabular-nums">
+                            {inr(r.amount)}
+                          </div>
+
+                          <div className="flex flex-wrap justify-end gap-1 text-[11px]">
                             <Link
-                              href={`/billing?edit=${encodeURIComponent(r.key)}`}
+                              href={viewHref}
                               prefetch={false}
                               className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
                             >
-                              Edit
+                              View
                             </Link>
-                          ) : null}
 
-                          {isAdmin ? <DeleteButton idOrNo={r.key} /> : null}
+                            {/* Print only for FINAL */}
+                            {r.status === "FINAL" ? (
+                              <Link
+                                href={printHref}
+                                prefetch={false}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
+                              >
+                                Print
+                              </Link>
+                            ) : null}
+
+                            {canEdit && r.status === "DRAFT" ? (
+                              <Link
+                                href={`/billing?edit=${encodeURIComponent(r.key)}`}
+                                prefetch={false}
+                                className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 font-medium hover:bg-card hover:no-underline"
+                              >
+                                Edit
+                              </Link>
+                            ) : null}
+
+                            {isAdmin ? <DeleteButton idOrNo={r.key} /> : null}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+
+            {/* Pagination (keep 15 per page) */}
+            <Pagination
+              baseSP={baseSP}
+              page={safePage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={PAGE_SIZE}
+            />
+          </>
         )}
       </section>
     </div>
