@@ -17,12 +17,20 @@ export default async function PublicMenuPage() {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const baseUrl = host ? `${proto}://${host}` : "";
 
-  const res = await fetch(`${baseUrl}/api/items`, {
-    next: { revalidate },
-  });
+  let all: Item[] = [];
+  try {
+    const res = await fetch(`${baseUrl}/api/items`, {
+      next: { revalidate },
+    });
 
-  const j = await res.json();
-  const all = (Array.isArray(j.items) ? j.items : []) as Item[];
+    if (res.ok) {
+      const j = await res.json().catch(() => ({} as any));
+      all = (Array.isArray((j as any).items) ? (j as any).items : []) as Item[];
+    }
+  } catch {
+    // fallback: empty list
+    all = [];
+  }
   const activeItems = all.filter((i) => i.active);
 
   // detect if you generally use GST/tax

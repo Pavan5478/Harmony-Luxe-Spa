@@ -178,10 +178,8 @@ function buildLinks(role: Role): LinkItem[] {
   }
 
   return [
-    { href: "/dashboard", label: "Dashboard", icon: ICONS.dashboard },
     { href: "/billing", label: "Billing", icon: ICONS.billing },
     { href: "/invoices", label: "Invoices", icon: ICONS.invoices },
-    { href: "/customers", label: "Customers", icon: ICONS.customers },
     { href: "/settings", label: "Settings", icon: ICONS.settings },
   ];
 }
@@ -195,7 +193,7 @@ function mobileOrder(role: Role): string[] {
     return ["/dashboard", "/invoices", "/expenses", "/reports", "/customers", "/settings"];
   }
   // CASHIER
-  return ["/dashboard", "/billing", "/invoices", "/customers", "/settings"];
+  return ["/billing", "/invoices", "/settings"];
 }
 
 function orderByHref(links: LinkItem[], hrefOrder: string[]) {

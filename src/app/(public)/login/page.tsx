@@ -43,6 +43,7 @@ export default function LoginPage() {
 
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [setupToken, setSetupToken] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +100,7 @@ export default function LoginPage() {
         // first-time password
         setStage("first");
         setNewPassword("");
+        setSetupToken(String((j as any)?.setupToken || ""));
         setError("");
         setInfo("Create a password for this user.");
         return;
@@ -122,7 +124,7 @@ export default function LoginPage() {
       const r = await fetch("/api/auth/set-first-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, newPassword }),
+        body: JSON.stringify({ email, newPassword, setupToken }),
       });
 
       const j = await r.json().catch(() => ({} as any));
@@ -136,6 +138,7 @@ export default function LoginPage() {
       setStage("login");
       setInfo("Password saved. Sign in with the new password.");
       setNewPassword("");
+      setSetupToken("");
     } finally {
       setSubmitting(false);
     }

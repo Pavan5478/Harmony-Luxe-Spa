@@ -13,6 +13,10 @@ export async function GET(req: Request) {
   const wantAll = url.searchParams.get("all");
 
   if (wantAll) {
+    const session = await getSession();
+    if (session.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const items = await listAll();
     return NextResponse.json({ items });
   }

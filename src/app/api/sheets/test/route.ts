@@ -1,7 +1,18 @@
 import { NextResponse } from "next/server";
 import { appendRows, readRows } from "@/lib/sheets";
+import { getSession } from "@/lib/session";
 
 export async function GET() {
+  // Safety: this endpoint should never be callable in production.
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+  }
+
+  const session = await getSession();
+  if (session.user?.role !== "ADMIN") {
+    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+  }
+
   const now = new Date().toISOString();
 
   // write one tiny test row to Invoices

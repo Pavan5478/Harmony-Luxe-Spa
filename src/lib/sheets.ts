@@ -1435,6 +1435,28 @@ export async function moveInvoiceToDeleted(key: string) {
   const row = rowRes.data.values?.[0];
   if (!row) return false;
 
+  // 2.5) Keep Customers index consistent: we are about to remove this invoice row from Invoices.
+  // This MUST be done before deleting the row.
+  try {
+    const meta = invoiceRowMeta(row as any[]);
+    const st = String(meta?.status || "").toUpperCase();
+    const isFinal = st === "FINAL";
+    const isDraft = st === "DRAFT";
+    const isVoid = st === "VOID";
+
+    if (meta?.key) {
+      await applyCustomerDelta(meta.key, {
+        deltaInvoices: -1,
+        deltaFinal: isFinal ? -1 : 0,
+        deltaDraft: isDraft ? -1 : 0,
+        deltaVoid: isVoid ? -1 : 0,
+        deltaTotalFinal: isFinal ? -(Number(meta.amount || 0) || 0) : 0,
+      });
+    }
+  } catch {
+    // Best-effort; don't block deletion.
+  }
+
   // 3) append to Deleted sheet
   await sheets.spreadsheets.values.append({
     spreadsheetId,

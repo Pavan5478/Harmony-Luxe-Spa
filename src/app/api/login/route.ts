@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { authenticate } from "@/lib/users";
 import type { Role } from "@/types/billing";
+import { createPasswordSetupToken } from "@/lib/passwordSetupToken";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json();
@@ -19,10 +20,12 @@ export async function POST(req: Request) {
 
     if (result.reason === "needs_setup") {
       // <– this is what the login page is looking for
+      const setupToken = createPasswordSetupToken(String(email || ""));
       return NextResponse.json(
         {
           ok: false,
           requirePasswordSetup: true,
+          setupToken,
           message:
             "Password not set for this user (column C empty). Please create one.",
         },

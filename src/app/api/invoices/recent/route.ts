@@ -1,12 +1,22 @@
 // src/app/api/invoices/recent/route.ts
 import { NextResponse } from "next/server";
 import { readRows } from "@/lib/sheets";
+import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 type RowStatus = "FINAL" | "DRAFT" | "VOID";
 
 export async function GET(request: Request) {
+  const session = await getSession();
+  const role = session.user?.role;
+  if (!session.user) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (role !== "ADMIN" && role !== "ACCOUNTS" && role !== "CASHIER") {
+    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+  }
+
   // ✅ read only A..W (skip RawJson X)
   const rows = await readRows("Invoices!A2:W");
 
@@ -50,5 +60,7 @@ export async function GET(request: Request) {
     status: r.status,
   }));
 
-  return NextResponse.json({ items });
+  const res = NextResponse.json({ ok: true, items });
+  res.headers.set("Cache-Control", "no-store");
+  return res;
 }
