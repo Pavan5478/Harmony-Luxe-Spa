@@ -28,13 +28,20 @@ function base64UrlDecode(input: string): Buffer {
 }
 
 function getSecret(): string {
-  // Reuse session secret to avoid adding another required env.
-  // In production, SESSION_SECRET MUST be set.
-  return (
-    process.env.PASSWORD_SETUP_SECRET ||
-    process.env.SESSION_SECRET ||
-    "dev_only_change_me_please_change_me_32chars_XYZ"
-  );
+  const setupSecret = String(process.env.PASSWORD_SETUP_SECRET || "").trim();
+  if (setupSecret.length >= 32) return setupSecret;
+
+  const sessionSecret = String(process.env.SESSION_SECRET || "").trim();
+  if (sessionSecret.length >= 32) return sessionSecret;
+
+  const isProdBuild = process.env.NEXT_PHASE === "phase-production-build";
+  if (process.env.NODE_ENV === "production" && !isProdBuild) {
+    throw new Error(
+      "PASSWORD_SETUP_SECRET (or SESSION_SECRET) must be set to at least 32 characters in production."
+    );
+  }
+
+  return "dev-password-setup-secret-local-only-change-me-1234";
 }
 
 function sign(payloadB64: string): string {

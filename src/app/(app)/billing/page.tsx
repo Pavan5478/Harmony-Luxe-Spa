@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type { BillLine, Customer, CustomerDraft } from "@/types/billing";
 import { computeTotals } from "@/lib/totals";
 import CustomerCard from "@/components/billing/CustomerCard";
@@ -130,10 +130,6 @@ function InvoiceDatePicker({
   const [view, setView] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
 
   useEffect(() => {
-    setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
-  }, [selected]);
-
-  useEffect(() => {
     function onDown(e: MouseEvent) {
       if (!open) return;
       const t = e.target as Node | null;
@@ -171,10 +167,6 @@ function InvoiceDatePicker({
 
   const firstDay = useMemo(() => new Date(view.getFullYear(), view.getMonth(), 1), [view]);
   const startWeekday = firstDay.getDay();
-  const daysInMonth = useMemo(() => {
-    return new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
-  }, [view]);
-
   const cells = useMemo(() => {
     const arr: { date: Date; inMonth: boolean }[] = [];
     const gridStart = new Date(view.getFullYear(), view.getMonth(), 1 - startWeekday);
@@ -212,7 +204,15 @@ function InvoiceDatePicker({
 
           <button
             type="button"
-            onClick={() => setOpen((p) => !p)}
+            onClick={() =>
+              setOpen((p) => {
+                const next = !p;
+                if (next) {
+                  setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
+                }
+                return next;
+              })
+            }
             className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground shadow-sm hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             aria-haspopup="dialog"
             aria-expanded={open}
@@ -341,23 +341,9 @@ function InvoiceDatePicker({
 }
 
 export default function BillingPage() {
-  const router = useRouter();
   const sp = useSearchParams();
   const editKey = sp.get("edit");
   const isEditing = !!editKey;
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/me", { cache: "no-store" });
-        const j = r.ok ? await r.json() : {};
-        const role = j?.role as "ADMIN" | "CASHIER" | "ACCOUNTS" | undefined;
-        if (role === "ACCOUNTS") router.replace("/dashboard");
-      } catch {
-        // ignore
-      }
-    })();
-  }, [router]);
 
   const [items, setItems] = useState<Item[]>([]);
   const [recentItemIds, setRecentItemIds] = useState<string[]>([]);
@@ -393,10 +379,16 @@ export default function BillingPage() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch("/api/items?all=1", { cache: "no-store" });
+        // Admin can fetch all items. Cashier/Accounts should gracefully fall back
+        // to active items when admin-only endpoint is forbidden.
+        let r = await fetch("/api/items?all=1", { cache: "no-store" });
+        if (!r.ok && (r.status === 401 || r.status === 403)) {
+          r = await fetch("/api/items", { cache: "no-store" });
+        }
         if (!r.ok) throw new Error(await r.text());
-        const j = await r.json();
-        if (!cancelled) setItems(j.items || []);
+
+        const j = (await r.json()) as { items?: Item[] };
+        if (!cancelled) setItems(Array.isArray(j.items) ? j.items : []);
       } catch (err) {
         console.error("Failed to load items", err);
         if (!cancelled) setItems([]);
@@ -596,7 +588,7 @@ export default function BillingPage() {
 
   const canSave = !needsItems && !discountTooHigh && !splitMismatch && customerValid;
 
-  const payload: any = {
+  const payload = {
     cashierEmail,
     customer,
     lines,
@@ -613,8 +605,8 @@ export default function BillingPage() {
 
   return (
     <div className="min-w-0 space-y-5 pb-24 lg:space-y-6 lg:pb-0">
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)]">
-        <div className="min-w-0 space-y-4">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.75fr)_minmax(340px,1fr)]">
+        <div className="min-w-0 space-y-4 xl:sticky xl:top-20 xl:self-start">
           <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <InvoiceDatePicker value={invoiceDate} onChange={setInvoiceDate} />
           </section>

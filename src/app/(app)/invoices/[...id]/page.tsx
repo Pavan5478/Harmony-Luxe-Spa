@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { getBill } from "@/store/bills";
 import InvoicePaper from "@/components/invoice/InvoicePaper";
 import InvoiceWorkspace from "@/components/invoice/InvoiceWorkspace";
+import type { BillDraft, BillLine, PaymentSplit } from "@/types/billing";
 
 type PageProps = {
   params: Promise<{ id: string[] | string }>;
@@ -12,6 +13,26 @@ type PageProps = {
 export const dynamic = "force-dynamic";
 
 const IST_TZ = "Asia/Kolkata";
+
+type InvoicePageBill = {
+  id?: string;
+  billNo?: string;
+  status?: string;
+  billDate?: string;
+  finalizedAt?: string;
+  createdAt?: string;
+  printedAt?: string;
+  customer?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+  };
+  lines?: BillLine[];
+  totals?: BillDraft["totals"];
+  notes?: string;
+  paymentMode?: string;
+  split?: PaymentSplit;
+};
 
 function safeDecode(v: string) {
   try {
@@ -56,9 +77,18 @@ function formatBillDate(d: Date) {
   }
 }
 
+function toSafePart(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9\-_\.]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 export default async function InvoicePage(props: PageProps) {
   const session = await getSession();
   if (!session.user) redirect("/login");
+  const role = session.user.role;
 
   const params = await props.params;
   const sp = (await props.searchParams) || {};
@@ -71,7 +101,7 @@ export default async function InvoicePage(props: PageProps) {
   const found = await getBill(key);
   if (!found) notFound();
 
-  const bill: any = found;
+  const bill = found as InvoicePageBill;
 
   const billDateISO = bill.billDate || bill.finalizedAt || bill.createdAt;
   const billDate = billDateISO ? new Date(billDateISO) : new Date();
@@ -97,8 +127,10 @@ export default async function InvoicePage(props: PageProps) {
   const spaPhone = "+91-90711 11599";
   const spaEmail = "harmonyluxetherapy@gmail.com";
 
-  const billNoLabel = String(bill.billNo || bill.id || key || "—");
+  const billNoLabel = String(bill.billNo || bill.id || key || "--");
   const billDateLabel = formatBillDate(billDate);
+  const pdfFileName = toSafePart(`Invoice-${billNoLabel}-${billDateLabel}`) || "Invoice";
+  const canMutate = role !== "ACCOUNTS";
 
   return (
     <div className="invoice-shell full-bleed px-4 py-4 sm:px-6 lg:px-8 print:p-0 print:px-0 print:py-0 print:bg-white">
@@ -107,10 +139,12 @@ export default async function InvoicePage(props: PageProps) {
         printedAt={printedAt}
         printedAtLabel={printedAtLabel}
         status={status}
+        canMutate={canMutate}
         autoPrint={autoPrint && status === "FINAL"}
         backHref={backHref}
         billNoLabel={billNoLabel}
         billDateLabel={billDateLabel}
+        pdfFileName={pdfFileName}
       >
         <InvoicePaper
           bill={bill}

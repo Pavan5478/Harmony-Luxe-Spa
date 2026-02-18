@@ -13,49 +13,56 @@ function clamp(n: number, min: number, max: number) {
 const LS_MODE = "bb.invoicePreview.mode"; // "fit" | "custom"
 const LS_SCALE = "bb.invoicePreview.scale"; // number (0.28..1.5)
 
+function getInitialZoomState() {
+  if (typeof window === "undefined") {
+    return { mode: "fit" as const, scale: 1 };
+  }
+
+  try {
+    const m = localStorage.getItem(LS_MODE);
+    const sRaw = localStorage.getItem(LS_SCALE);
+    const s = sRaw ? Number(sRaw) : NaN;
+    if (m === "custom" && Number.isFinite(s)) {
+      return { mode: "custom" as const, scale: clamp(s, 0.28, 1.5) };
+    }
+  } catch {
+    // ignore
+  }
+
+  return { mode: "fit" as const, scale: 1 };
+}
+
 export default function InvoiceWorkspace({
   children,
   idOrNo,
   printedAt,
   printedAtLabel,
   status,
+  canMutate = true,
   autoPrint,
   backHref,
   billNoLabel,
   billDateLabel,
+  pdfFileName,
 }: {
   children: React.ReactNode;
   idOrNo: string;
   printedAt: string | null;
   printedAtLabel?: string | null;
   status: Status;
+  canMutate?: boolean;
   autoPrint?: boolean;
   backHref: string;
   billNoLabel: string;
   billDateLabel: string;
+  pdfFileName: string;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const paperRef = useRef<HTMLDivElement | null>(null);
 
   const [fitScale, setFitScale] = useState(1);
-  const [scale, setScale] = useState(1);
-  const [mode, setMode] = useState<"fit" | "custom">("fit");
-
-  // Restore zoom preference
-  useEffect(() => {
-    try {
-      const m = localStorage.getItem(LS_MODE);
-      const sRaw = localStorage.getItem(LS_SCALE);
-      const s = sRaw ? Number(sRaw) : NaN;
-
-      if (m === "custom" && Number.isFinite(s)) {
-        setMode("custom");
-        setScale(clamp(s, 0.28, 1.5));
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
+  const [scale, setScale] = useState(() => getInitialZoomState().scale);
+  const [mode, setMode] = useState<"fit" | "custom">(() => getInitialZoomState().mode);
 
   // Persist zoom preference
   useEffect(() => {
@@ -117,9 +124,7 @@ export default function InvoiceWorkspace({
     return () => window.removeEventListener("resize", calc);
   }, []);
 
-  useEffect(() => {
-    if (mode === "fit") setScale(fitScale);
-  }, [fitScale, mode]);
+  const effectiveScale = mode === "fit" ? fitScale : scale;
 
   function setCustom(next: number) {
     setMode("custom");
@@ -128,14 +133,13 @@ export default function InvoiceWorkspace({
 
   function onFit() {
     setMode("fit");
-    setScale(fitScale);
   }
 
-  const pct = Math.round(scale * 100);
+  const pct = Math.round(effectiveScale * 100);
   const printedLabel =
     printedAtLabel ?? (printedAt ? new Date(printedAt).toLocaleString() : null);
 
-  const backLabel = backHref.startsWith("/billing") ? "← Back to billing" : "← Back to invoices";
+  const backLabel = backHref.startsWith("/billing") ? "< Back to billing" : "< Back to invoices";
 
   return (
     <div className="invoice-workspace-root mx-auto w-full max-w-7xl print:max-w-none">
@@ -147,7 +151,7 @@ export default function InvoiceWorkspace({
       {/* SCREEN MODE */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start print:hidden">
         {/* LEFT: Preview */}
-        <section className="rounded-2xl border border-border bg-card/40 p-3 shadow-sm h-[calc(100svh-9rem)] lg:sticky lg:top-20 lg:h-[calc(100svh-7.5rem)]">
+        <section className="order-2 h-[62svh] rounded-2xl border border-border bg-card/40 p-3 shadow-sm sm:h-[70svh] lg:order-1 lg:sticky lg:top-20 lg:h-[calc(100svh-7.5rem)]">
           <div className="invoice-preview-frame h-full w-full overflow-hidden rounded-xl bg-background/70 p-3">
             <div ref={frameRef} className="h-full w-full overflow-hidden">
               <div className="flex h-full w-full justify-center">
@@ -155,7 +159,7 @@ export default function InvoiceWorkspace({
                   ref={paperRef}
                   className="invoice-scale origin-top transform-gpu bg-white shadow-sm ring-1 ring-border/70"
                   style={{
-                    transform: `scale(${scale})`,
+                    transform: `scale(${effectiveScale})`,
                     transformOrigin: "top center",
                   }}
                 >
@@ -167,7 +171,7 @@ export default function InvoiceWorkspace({
         </section>
 
         {/* RIGHT: Controls */}
-        <aside className="rounded-2xl border border-border bg-card p-4 shadow-sm lg:sticky lg:top-20 lg:h-[calc(100svh-7.5rem)] lg:overflow-auto">
+        <aside className="order-1 rounded-2xl border border-border bg-card p-4 shadow-sm lg:order-2 lg:sticky lg:top-20 lg:h-[calc(100svh-7.5rem)] lg:overflow-auto">
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -191,7 +195,7 @@ export default function InvoiceWorkspace({
               <div className="flex items-center justify-between">
                 <div className="text-[11px] font-semibold text-foreground">Preview</div>
                 <div className="text-[11px] text-muted">
-                  {pct}% {mode === "fit" ? "• Fit" : "• Custom"}
+                  {pct}% {mode === "fit" ? "| Fit" : "| Custom"}
                 </div>
               </div>
 
@@ -209,14 +213,14 @@ export default function InvoiceWorkspace({
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setCustom(scale - 0.1)}
+                  onClick={() => setCustom(effectiveScale - 0.1)}
                   className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-card"
                 >
-                  −
+                  -
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCustom(scale + 0.1)}
+                  onClick={() => setCustom(effectiveScale + 0.1)}
                   className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-card"
                 >
                   +
@@ -247,7 +251,9 @@ export default function InvoiceWorkspace({
                 idOrNo={idOrNo}
                 printedAt={printedAt}
                 status={status}
+                canMutate={canMutate}
                 autoPrint={autoPrint}
+                pdfFileName={pdfFileName}
               />
             </div>
 

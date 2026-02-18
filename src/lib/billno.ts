@@ -1,5 +1,5 @@
 ﻿// src/lib/billno.ts
-import { allocateNextBillSeq, readRows } from "./sheets";
+import { allocateNextBillSeq, loadBillFromSheetByKey, readRows } from "./sheets";
 
 /**
  * Compute current financial year string, e.g. "2025-26".
@@ -31,9 +31,17 @@ export async function nextBillNo(): Promise<string> {
 
   // Fast path: allocate from BillCounter sheet (O(1) read/write).
   try {
-    const seq = await allocateNextBillSeq(fy);
-    const padded = String(seq).padStart(6, "0");
-    return `${prefix}${padded}`;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const seq = await allocateNextBillSeq(fy);
+      const padded = String(seq).padStart(6, "0");
+      const billNo = `${prefix}${padded}`;
+
+      // Defensive check in case of multi-instance races.
+      if (!(await loadBillFromSheetByKey(billNo))) {
+        return billNo;
+      }
+    }
+    throw new Error("Could not allocate unique bill number");
   } catch {
     // Fallback (migration/edge): scan bill numbers column.
     const colA = await readRows("Invoices!A2:A");

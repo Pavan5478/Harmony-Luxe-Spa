@@ -1,7 +1,7 @@
 ﻿// src/components/billing/CustomerCard.tsx
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type { CustomerDraft } from "@/types/billing";
 
 type Props = {
@@ -58,16 +58,8 @@ export default function CustomerCard({
     email: false,
   });
 
-  // keep a local display value for phone so we can format while typing without breaking caret too much
-  const [phoneView, setPhoneView] = useState<string>(value.phone ?? "");
-
-  useEffect(() => {
-    // when parent updates (edit mode), keep view in sync
-    setPhoneView(value.phone ?? "");
-  }, [value.phone]);
-
   const name = (value.name ?? "").trim();
-  const phoneRaw = phoneView;
+  const phoneRaw = value.phone ?? "";
   const email = (value.email ?? "").trim();
 
   const phoneDigits = useMemo(() => onlyDigits(phoneRaw), [phoneRaw]);
@@ -97,7 +89,6 @@ export default function CustomerCard({
   function onPhoneChange(next: string) {
     // allow +91 users to paste, strip to 10 digits
     const formatted = formatIndianPhone(next);
-    setPhoneView(formatted);
     setField("phone", formatted);
   }
 
@@ -204,7 +195,7 @@ export default function CustomerCard({
             inputMode="numeric"
             autoComplete="tel"
             placeholder="10-digit phone"
-            value={phoneView}
+            value={phoneRaw}
             onChange={(e) => onPhoneChange(e.target.value)}
             onBlur={() => setTouched((p) => ({ ...p, phone: true }))}
             onKeyDown={(e) => onKeyDown(e, "phone")}

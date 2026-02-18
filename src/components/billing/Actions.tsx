@@ -3,11 +3,32 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
+import type { BillDraft, BillLine, CustomerDraft, PaymentMode, PaymentSplit } from "@/types/billing";
 
 type BillStatus = "DRAFT" | "FINAL" | "VOID";
 
+type BillingPayload = {
+  cashierEmail?: string;
+  customer?: CustomerDraft;
+  lines: BillLine[];
+  discountFlat?: number;
+  discountPct?: number;
+  gstRate?: number;
+  isInterState?: boolean;
+  paymentMode?: PaymentMode;
+  split?: PaymentSplit;
+  notes?: string;
+  totals: BillDraft["totals"];
+  billDate?: string;
+};
+
+type PersistResponse = {
+  id?: string;
+  bill?: { id?: string; billNo?: string };
+};
+
 type Props = {
-  payload: any;
+  payload: BillingPayload;
   disabled?: boolean;
   /** If present, we are editing an existing bill (draft or final) */
   editKey?: string;
@@ -137,9 +158,9 @@ export default function BillingActions({
     setStatusMessage(msg);
   }
 
-  async function readJsonSafe(res: Response): Promise<any> {
+  async function readJsonSafe(res: Response): Promise<PersistResponse> {
     try {
-      return await res.json();
+      return (await res.json()) as PersistResponse;
     } catch {
       return {};
     }
@@ -243,7 +264,7 @@ export default function BillingActions({
         if (!res.ok) throw new Error(await res.text());
 
         const data = await readJsonSafe(res);
-        const billNo: string = data?.bill?.billNo || data?.bill?.id;
+        const billNo = data?.bill?.billNo ?? data?.bill?.id;
         if (!billNo) throw new Error("Missing bill number");
 
         setBanner("success", "Invoice generated. Opening…");

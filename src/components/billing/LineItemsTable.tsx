@@ -27,10 +27,10 @@ export default function LineItemsTable({
           - avoid desktop cropping by using fixed widths + truncation rules
       */}
       <div className="w-full overflow-x-auto [scrollbar-width:thin]">
-        <table className="w-full min-w-[720px] table-fixed text-left text-xs sm:min-w-0 sm:text-sm">
+        <table className="w-full min-w-[700px] table-fixed text-left text-xs md:min-w-[760px] xl:min-w-0 sm:text-sm">
           {/* column sizing (stable on desktop + predictable on mobile) */}
           <colgroup>
-            <col className="w-[42%] sm:w-auto" />
+            <col className="w-[45%] sm:w-auto" />
             <col className="w-[140px]" />
             <col className="w-[120px]" />
             <col className="w-[140px]" />
@@ -56,7 +56,6 @@ export default function LineItemsTable({
                     {/* Wrap nicely (no vertical letter stacking) */}
                     <div
                       className="whitespace-normal break-words text-sm font-semibold leading-snug text-foreground"
-                      style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
                       title={l.name}
                     >
                       {l.name}
@@ -64,7 +63,6 @@ export default function LineItemsTable({
                     {l.variant ? (
                       <div
                         className="mt-0.5 whitespace-normal break-words text-[11px] text-muted"
-                        style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
                         title={l.variant}
                       >
                         {l.variant}

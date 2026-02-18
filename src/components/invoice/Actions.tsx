@@ -9,10 +9,12 @@ type Props = {
   idOrNo: string;
   printedAt: string | null;
   status: Status;
+  canMutate?: boolean;
   autoPrint?: boolean;
+  pdfFileName?: string;
 };
 
-type Loading = null | "PRINT" | "FINALIZE" | "EDIT";
+type Loading = null | "PRINT" | "PDF" | "FINALIZE" | "EDIT";
 type Tone = "info" | "success" | "error";
 
 function Spinner({ className = "" }: { className?: string }) {
@@ -44,11 +46,28 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-function safe(p: Promise<any>) {
+function safe(p: Promise<unknown>) {
   p.catch((e) => console.error(e));
 }
 
-export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }: Props) {
+function toSafeTitle(value: string) {
+  const cleaned = String(value || "")
+    .trim()
+    .replace(/\.pdf$/i, "")
+    .replace(/[^a-zA-Z0-9\-_\.]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return cleaned || "Invoice";
+}
+
+export default function InvoiceActions({
+  idOrNo,
+  printedAt,
+  status,
+  canMutate = true,
+  autoPrint,
+  pdfFileName,
+}: Props) {
   const router = useRouter();
 
   const [loading, setLoading] = useState<Loading>(null);
@@ -105,12 +124,12 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
   async function handlePrint(kind: "print" | "pdf" = "print") {
     if (busy || isVoid) return;
 
-    setLoading("PRINT");
+    setLoading(kind === "pdf" ? "PDF" : "PRINT");
     setTone("info");
     setMsg(kind === "pdf" ? "Opening save as PDF…" : "Opening print…");
 
-    const safeId = idOrNo.replace(/[^a-zA-Z0-9\-_\.]+/g, "-");
-    const title = `Invoice-${safeId}`;
+    const safeId = toSafeTitle(idOrNo);
+    const title = kind === "pdf" ? toSafeTitle(pdfFileName || `Invoice-${safeId}`) : `Invoice-${safeId}`;
 
     const after = () => {
       // mark printed only once (when previously not marked)
@@ -133,7 +152,7 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
   }
 
   function handleEditDraft() {
-    if (!isDraft || busy) return;
+    if (!isDraft || !canMutate || busy) return;
     setLoading("EDIT");
     setTone("info");
     setMsg("Opening draft…");
@@ -141,7 +160,7 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
   }
 
   async function handlePrintAndFinalize() {
-    if (!isDraft || busy) return;
+    if (!isDraft || !canMutate || busy) return;
 
     setLoading("FINALIZE");
     setTone("info");
@@ -203,25 +222,31 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
       <div className="flex flex-wrap gap-2">
         {isDraft ? (
           <>
-            <button
-              type="button"
-              onClick={handleEditDraft}
-              disabled={busy}
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground hover:bg-card disabled:opacity-60"
-            >
-              {loading === "EDIT" ? <Spinner className="text-muted" /> : null}
-              {loading === "EDIT" ? "Opening…" : "Edit draft"}
-            </button>
+            {canMutate ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleEditDraft}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground hover:bg-card disabled:opacity-60"
+                >
+                  {loading === "EDIT" ? <Spinner className="text-muted" /> : null}
+                  {loading === "EDIT" ? "Opening…" : "Edit draft"}
+                </button>
 
-            <button
-              type="button"
-              onClick={handlePrintAndFinalize}
-              disabled={busy}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-            >
-              {loading === "FINALIZE" ? <Spinner /> : null}
-              {loading === "FINALIZE" ? "Finalizing…" : "Print & finalize"}
-            </button>
+                <button
+                  type="button"
+                  onClick={handlePrintAndFinalize}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                >
+                  {loading === "FINALIZE" ? <Spinner /> : null}
+                  {loading === "FINALIZE" ? "Finalizing…" : "Print & finalize"}
+                </button>
+              </>
+            ) : (
+              <div className="text-xs text-muted">Draft actions are disabled for this role.</div>
+            )}
           </>
         ) : isVoid ? (
           <div className="text-xs text-muted">This invoice is void.</div>
@@ -234,7 +259,7 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
               className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
               {loading === "PRINT" ? <Spinner /> : null}
-              {loading === "PRINT" ? "Preparing…" : "Print"}
+              {loading === "PRINT" ? "Preparing..." : "Print"}
             </button>
 
             <button
@@ -242,9 +267,9 @@ export default function InvoiceActions({ idOrNo, printedAt, status, autoPrint }:
               onClick={() => handlePrint("pdf")}
               disabled={busy}
               className="inline-flex items-center rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground hover:bg-card disabled:opacity-60"
-              title="Use the print dialog and choose “Save as PDF”"
+              title="Opens print dialog. Choose Save as PDF."
             >
-              Save as PDF
+              {loading === "PDF" ? "Preparing..." : "Save as PDF"}
             </button>
           </>
         )}

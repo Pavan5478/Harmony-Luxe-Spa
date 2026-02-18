@@ -1,7 +1,7 @@
 // src/components/billing/ExtrasCard.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const DEFAULT_GST = 0.00; // 5%
 
@@ -37,10 +37,6 @@ export default function ExtrasCard({
   const hasAnyExtras = hasCustomGst || hasDiscount || hasNotes || interState;
 
   const [open, setOpen] = useState(() => hasAnyExtras);
-
-  useEffect(() => {
-    if (hasAnyExtras) setOpen(true);
-  }, [hasAnyExtras]);
 
   const summary = useMemo(() => {
     const parts: string[] = [];

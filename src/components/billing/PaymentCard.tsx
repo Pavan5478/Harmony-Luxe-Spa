@@ -1,6 +1,7 @@
 ﻿"use client";
 
 type Split = { cash?: number; card?: number; upi?: number };
+type PaymentMode = "CASH" | "CARD" | "UPI" | "SPLIT";
 
 export default function PaymentCard({
   mode,
@@ -9,8 +10,8 @@ export default function PaymentCard({
   onSplit,
   expectedTotal,
 }: {
-  mode: "CASH" | "CARD" | "UPI" | "SPLIT";
-  onMode: (m: any) => void;
+  mode: PaymentMode;
+  onMode: (m: PaymentMode) => void;
   split: Split;
   onSplit: (s: Split) => void;
   expectedTotal: number;

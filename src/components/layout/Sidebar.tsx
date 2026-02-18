@@ -234,11 +234,6 @@ export default function Sidebar() {
     return () => ac.abort();
   }, []);
 
-  // close drawer on route change
-  useEffect(() => {
-    setMoreOpen(false);
-  }, [pathname]);
-
   // close on ESC
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -364,6 +359,7 @@ export default function Sidebar() {
                 key={link.href}
                 href={link.href}
                 prefetch={false}
+                onClick={() => setMoreOpen(false)}
                 aria-current={active ? "page" : undefined}
                 className={[
                   "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 transition",

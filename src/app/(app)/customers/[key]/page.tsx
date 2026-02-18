@@ -67,15 +67,17 @@ export default async function CustomerDetailsPage({
 }) {
   const session = await getSession();
   if (!session.user) redirect("/login");
+  const role = session.user.role;
 
   const { key } = await params;
   const sp = (await searchParams) || {};
+  const statusFilter = (sp.status || "ALL") as SP["status"];
 
   const wanted = decodeURIComponent(String(key || "").trim());
   const data = await getCustomerByKey(wanted, {
     fromISO: sp.from,
     toISO: sp.to,
-    status: (sp.status || "ALL") as any,
+    status: statusFilter,
   });
 
   if (!data) notFound();
@@ -89,6 +91,7 @@ export default async function CustomerDetailsPage({
   ]
     .filter(Boolean)
     .join("&")}`;
+  const canCreateBill = role === "ADMIN" || role === "CASHIER";
 
   return (
     <div className="space-y-4 lg:space-y-5">
@@ -121,13 +124,15 @@ export default async function CustomerDetailsPage({
           >
             Back
           </Link>
-          <Link
-            href={billingHref}
-            prefetch={false}
-            className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-          >
-            + New bill
-          </Link>
+          {canCreateBill ? (
+            <Link
+              href={billingHref}
+              prefetch={false}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              + New bill
+            </Link>
+          ) : null}
         </div>
       </div>
 
@@ -195,7 +200,7 @@ export default async function CustomerDetailsPage({
 
           <select
             name="status"
-            defaultValue={(sp.status || "ALL") as any}
+            defaultValue={statusFilter}
             className="h-10 rounded-full border border-border bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <option value="ALL">All</option>

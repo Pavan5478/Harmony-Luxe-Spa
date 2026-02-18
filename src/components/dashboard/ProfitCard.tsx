@@ -224,7 +224,9 @@ export default function ProfitCard({
 
     const px = (pts[best].x / W) * rect.width;
     const py = (pts[best].y / H) * rect.height;
-    setTip({ x: px, y: py });
+    const tipX = clamp(px + 12, 10, Math.max(10, rect.width - 250));
+    const tipY = clamp(py - 54, 10, Math.max(10, rect.height - 92));
+    setTip({ x: tipX, y: tipY });
   }
 
   function clearTip() {
@@ -409,8 +411,8 @@ export default function ProfitCard({
               <div
                 className="pointer-events-none absolute z-10 min-w-[230px] rounded-2xl border border-border bg-card px-3 py-2 text-[11px] shadow-lg"
                 style={{
-                  left: clamp(tip.x + 12, 10, (wrapRef.current?.clientWidth || 0) - 250),
-                  top: clamp(tip.y - 54, 10, (wrapRef.current?.clientHeight || 0) - 92),
+                  left: tip.x,
+                  top: tip.y,
                 }}
               >
                 <div className="flex items-center justify-between gap-3">

@@ -1,6 +1,31 @@
 // src/components/invoice/InvoicePaper.tsx
 import Image from "next/image";
 import { inr } from "@/lib/format";
+import type { BillLine, PaymentSplit } from "@/types/billing";
+
+type InvoiceBill = {
+  billNo?: string;
+  id?: string;
+  customer?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+  };
+  lines?: BillLine[];
+  totals?: {
+    subtotal?: number;
+    discount?: number;
+    taxableBase?: number;
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+    roundOff?: number;
+    grandTotal?: number;
+  };
+  notes?: string;
+  paymentMode?: string;
+  split?: PaymentSplit;
+};
 
 function toPaise(v: number): number {
   return Math.round((Number(v) || 0) * 100);
@@ -23,7 +48,7 @@ export default function InvoicePaper({
   spaEmail,
   billDate,
 }: {
-  bill: any;
+  bill: InvoiceBill;
   spaName: string;
   spaAddress: string[];
   spaPhone: string;
@@ -40,7 +65,7 @@ export default function InvoicePaper({
   const notes = String(bill.notes || "").trim();
   const hasNotes = notes.length > 0;
 
-  const billNo = String(bill.billNo || bill.id || "").trim() || "—";
+  const billNo = String(bill.billNo || bill.id || "").trim() || "--";
 
   const dateStr = new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
@@ -81,7 +106,7 @@ export default function InvoicePaper({
       </div>
 
       {/* Details */}
-      <div className="mt-3 grid grid-cols-2 gap-6">
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
         <div>
           <div className="text-base font-semibold text-slate-900">{spaName}</div>
           <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
@@ -89,12 +114,12 @@ export default function InvoicePaper({
               <div key={i}>{line}</div>
             ))}
             <div className="pt-1">
-              Phone: {spaPhone} · Email: {spaEmail}
+              Phone: {spaPhone} | Email: {spaEmail}
             </div>
           </div>
         </div>
 
-        <div className="text-right">
+        <div className="text-left sm:text-right print:text-right">
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             Billed to
           </div>
@@ -108,7 +133,7 @@ export default function InvoicePaper({
 
             <div className="pt-1">
               <span className="font-medium text-slate-900">Payment:</span>{" "}
-              {bill.paymentMode || "—"}
+              {bill.paymentMode || "--"}
             </div>
 
             {bill.split && bill.paymentMode === "SPLIT" ? (
@@ -144,11 +169,11 @@ export default function InvoicePaper({
         </thead>
 
         <tbody>
-          {lines.map((l: any, idx: number) => {
+          {lines.map((l: BillLine, idx: number) => {
             const qty = Number(l.qty || 0);
             const rate = Number(l.rate || 0);
 
-            // ✅ accept stored amount even if it comes as string from sheets
+            // accept stored amount even if it comes as string from sheets
             const storedAmount = Number(l.amount);
             const amount = Number.isFinite(storedAmount)
               ? storedAmount
@@ -162,15 +187,15 @@ export default function InvoicePaper({
                 <td className="py-2 pr-2">{idx + 1}</td>
 
                 <td className="py-2 pr-2">
-                  <div className="font-medium text-slate-900">{l.name || "—"}</div>
+                  <div className="font-medium text-slate-900">{l.name || "--"}</div>
                   {l.itemId ? <div className="text-[10px] text-slate-500">Code: {l.itemId}</div> : null}
                 </td>
 
                 <td className="py-2 pr-2">
-                  {l.variant || <span className="text-slate-400">—</span>}
+                  {l.variant || <span className="text-slate-400">--</span>}
                 </td>
 
-                <td className="py-2 pr-2 text-right">{Number.isFinite(qty) ? qty : "—"}</td>
+                <td className="py-2 pr-2 text-right">{Number.isFinite(qty) ? qty : "--"}</td>
                 <td className="py-2 pr-2 text-right">{inr(Number.isFinite(rate) ? rate : 0)}</td>
                 <td className="py-2 pl-2 text-right">{inr(amount)}</td>
               </tr>
@@ -180,8 +205,8 @@ export default function InvoicePaper({
       </table>
 
       {/* Notes + totals */}
-      <div className="mt-3 flex items-start justify-between gap-6">
-        <div className="w-1/2">
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between print:flex-row print:items-start print:justify-between">
+        <div className="w-full sm:w-1/2 print:w-1/2">
           {hasNotes ? (
             <>
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -192,7 +217,7 @@ export default function InvoicePaper({
           ) : null}
         </div>
 
-        <div className="ml-auto w-[78mm] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="w-full sm:ml-auto sm:w-[78mm] print:ml-auto print:w-[78mm] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
           <table className="w-full border-collapse text-[11px]">
             <tbody>
               <tr>
@@ -203,7 +228,7 @@ export default function InvoicePaper({
               {hasDiscount ? (
                 <tr>
                   <td className="py-1 pr-2 text-slate-600">Discount</td>
-                  <td className="py-1 pl-2 text-right text-slate-900">−{inr(discount)}</td>
+                  <td className="py-1 pl-2 text-right text-slate-900">-{inr(discount)}</td>
                 </tr>
               ) : null}
 
@@ -256,7 +281,7 @@ export default function InvoicePaper({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="font-medium text-slate-700">{spaName}</div>
-            <div className="mt-0.5">{spaAddress.join(" · ")}</div>
+            <div className="mt-0.5">{spaAddress.join(" | ")}</div>
           </div>
           <div className="shrink-0 text-right">
             <div>{spaPhone}</div>

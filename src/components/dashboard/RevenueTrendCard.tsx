@@ -176,7 +176,9 @@ export default function RevenueTrendCard({
     // place tooltip near point in container px coords
     const px = (pts[best].x / W) * rect.width;
     const py = (pts[best].y / H) * rect.height;
-    setTip({ x: px, y: py });
+    const tipX = clamp(px + 12, 8, Math.max(8, rect.width - 210));
+    const tipY = clamp(py - 40, 8, Math.max(8, rect.height - 72));
+    setTip({ x: tipX, y: tipY });
   }
 
   function clearTip() {
@@ -248,8 +250,8 @@ export default function RevenueTrendCard({
               <div
                 className="pointer-events-none absolute z-10 min-w-[190px] rounded-xl border border-border bg-card/95 px-3 py-2 text-[11px] shadow-md"
                 style={{
-                  left: clamp(tip.x + 12, 8, (wrapRef.current?.clientWidth || 0) - 210),
-                  top: clamp(tip.y - 40, 8, (wrapRef.current?.clientHeight || 0) - 72),
+                  left: tip.x,
+                  top: tip.y,
                 }}
               >
                 <div className="flex items-center justify-between gap-3">

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { listActive, listAll, upsertItem } from "@/store/items";
 import { getSession } from "@/lib/session";
+import type { Item } from "@/types/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const item = {
+  const item: Item = {
     id: String(body.id || "").trim(),
     name: String(body.name || "").trim(),
     category: body.category ? String(body.category).trim() : undefined,
@@ -53,6 +54,6 @@ export async function POST(req: Request) {
     );
   }
 
-  await upsertItem(item as any);
+  await upsertItem(item);
   return NextResponse.json({ ok: true, item });
 }

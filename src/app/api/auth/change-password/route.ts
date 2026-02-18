@@ -8,7 +8,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const { email, oldPassword, newPassword } = await req.json();
+  let body: { email?: string; oldPassword?: string; newPassword?: string } = {};
+  try {
+    body = (await req.json()) as { email?: string; oldPassword?: string; newPassword?: string };
+  } catch {
+    // keep empty body
+  }
+
+  const { email, oldPassword, newPassword } = body;
 
   const isAdmin = session.user.role === "ADMIN";
   const targetEmail = (isAdmin && email ? String(email) : String(session.user.email))
@@ -37,6 +44,6 @@ export async function POST(req: Request) {
   }
 
   // Admin reset: allow even if old password is unknown.
-  await setPassword(targetEmail, (u.role as any) || "CASHIER", String(newPassword));
-  return NextResponse.json({ ok:true });
+  await setPassword(targetEmail, u.role || "CASHIER", String(newPassword));
+  return NextResponse.json({ ok: true });
 }

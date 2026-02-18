@@ -11,7 +11,12 @@ export default function Topbar() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(null);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof document !== "undefined" && document.documentElement.classList.contains("theme-dark")) {
+      return "dark";
+    }
+    return "light";
+  });
 
   useEffect(() => {
     const ac = new AbortController();
@@ -24,11 +29,6 @@ export default function Topbar() {
       } catch {}
     })();
     return () => ac.abort();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setTheme(document.documentElement.classList.contains("theme-dark") ? "dark" : "light");
   }, []);
 
   function toggleTheme() {

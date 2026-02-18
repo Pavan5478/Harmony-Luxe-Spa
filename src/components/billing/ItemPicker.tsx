@@ -243,9 +243,9 @@ export default function ItemPicker({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const didInitShortcuts = useRef(false);
+  const [showShortcuts, setShowShortcuts] = useState(
+    () => (recentItems?.length ?? 0) > 0
+  );
 
   const blockNextFocusOpenRef = useRef(false);
 
@@ -287,12 +287,6 @@ export default function ItemPicker({
     return recentItems.filter((r) => allowed.has(r.id));
   }, [recentItems, usableItems]);
 
-  useEffect(() => {
-    if (didInitShortcuts.current) return;
-    setShowShortcuts((usableRecent?.length ?? 0) > 0);
-    didInitShortcuts.current = true;
-  }, [usableRecent]);
-
   const { groups, options, tokens, meta } = useMemo(
     () => buildGroups(query, usableItems, usableRecent, category),
     [query, usableItems, usableRecent, category]
@@ -303,16 +297,8 @@ export default function ItemPicker({
     options.forEach((it, ix) => m.set(it.id, ix));
     return m;
   }, [options]);
-
-  useEffect(() => setActive(0), [query, category]);
-
-  useEffect(() => {
-    setActive((v) => {
-      const n = options.length;
-      if (n <= 0) return 0;
-      return Math.min(Math.max(v, 0), n - 1);
-    });
-  }, [options.length]);
+  const activeIndex =
+    options.length <= 0 ? 0 : Math.min(Math.max(active, 0), options.length - 1);
 
   function optionId(ix: number) {
     return `${listId}-opt-${ix}`;
@@ -362,7 +348,7 @@ export default function ItemPicker({
   // keep active option visible
   useEffect(() => {
     if (!open || options.length === 0) return;
-    const el = document.getElementById(optionId(active));
+    const el = document.getElementById(`${listId}-opt-${activeIndex}`);
     const box = listRef.current;
     if (!el || !box) return;
 
@@ -373,7 +359,7 @@ export default function ItemPicker({
 
     if (top < viewTop) box.scrollTop = top;
     else if (bottom > viewBottom) box.scrollTop = bottom - box.clientHeight;
-  }, [active, open, options.length]);
+  }, [activeIndex, listId, open, options.length]);
 
   // Global shortcut
   useEffect(() => {
@@ -393,8 +379,8 @@ export default function ItemPicker({
         setOpen(true);
       }
     }
-    window.addEventListener("keydown", onGlobalKey as any);
-    return () => window.removeEventListener("keydown", onGlobalKey as any);
+    window.addEventListener("keydown", onGlobalKey);
+    return () => window.removeEventListener("keydown", onGlobalKey);
   }, []);
 
   function moveActive(delta: number) {
@@ -433,7 +419,7 @@ export default function ItemPicker({
 
     if (e.key === "Enter") {
       if (!open) return void openDropdown();
-      const it = options[active];
+      const it = options[activeIndex];
       if (it) {
         e.preventDefault();
         pick(it);
@@ -506,7 +492,10 @@ export default function ItemPicker({
                 <button
                   key={c.key}
                   type="button"
-                  onClick={() => setCategory(c.key)}
+                  onClick={() => {
+                    setCategory(c.key);
+                    setActive(0);
+                  }}
                   className={[
                     "shrink-0 rounded-full px-3 py-1",
                     activeChip
@@ -541,7 +530,7 @@ export default function ItemPicker({
                 {g.items.map((it) => {
                   const ix = optionIndex.get(it.id);
                   if (ix == null) return null;
-                  const selected = ix === active;
+                  const selected = ix === activeIndex;
 
                   return (
                     <div
@@ -609,13 +598,14 @@ export default function ItemPicker({
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         {/* Wrap input + dropdown with relative so dropdown anchors correctly */}
         <div className="relative">
-          <div className="">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 shadow-sm">
             <input
               id={`${listId}-q`}
               ref={inputRef}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
+                setActive(0);
                 openDropdown();
               }}
               onFocus={() => {
@@ -625,10 +615,10 @@ export default function ItemPicker({
               onKeyDown={onInputKeyDown}
               placeholder="+ Add line item… (type to search)"
               autoComplete="off"
-              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
+              className="w-full !border-0 !bg-transparent !p-0 !shadow-none text-sm text-foreground outline-none placeholder:text-muted"
               aria-autocomplete="list"
               aria-controls={`${listId}-listbox`}
-              aria-activedescendant={open && options.length ? optionId(active) : undefined}
+              aria-activedescendant={open && options.length ? optionId(activeIndex) : undefined}
             />
 
             {/* clear query (x) */}
@@ -670,6 +660,8 @@ export default function ItemPicker({
             </div>
             <div className="flex items-center gap-2">
               {meta.filterLabel ? <span>Filter: {meta.filterLabel}</span> : <span>Filter: All</span>}
+              {totalPill}
+              {resultsPill}
             </div>
           </div>
 
@@ -714,7 +706,10 @@ export default function ItemPicker({
               <div className="rounded-2xl border border-border bg-card px-3 py-2 shadow-sm">
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setActive(0);
+                  }}
                   onKeyDown={onInputKeyDown}
                   placeholder="Search… (e.g. thai 60)"
                   className="w-full bg-transparent text-sm outline-none placeholder:text-muted"

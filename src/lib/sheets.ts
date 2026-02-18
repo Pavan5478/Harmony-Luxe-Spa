@@ -117,6 +117,7 @@ let _billCounterReady: Promise<void> | null = null;
 
 const BILL_COUNTER_CACHE_MS = 60_000;
 let _billCounterCache: { rows: any[][]; ts: number } | null = null;
+const _billCounterLocks = new Map<string, Promise<void>>();
 
 let _customerSheetsReady: Promise<void> | null = null;
 
@@ -324,6 +325,28 @@ async function safeReadBillCounterRows(): Promise<any[][]> {
   }
 }
 
+async function withBillCounterLock<T>(fy: string, task: () => Promise<T>): Promise<T> {
+  const key = String(fy || "").trim().toUpperCase();
+  const prev = _billCounterLocks.get(key) || Promise.resolve();
+
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  _billCounterLocks.set(key, prev.then(() => next));
+
+  await prev;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (_billCounterLocks.get(key) === next) {
+      _billCounterLocks.delete(key);
+    }
+  }
+}
+
 function parseBillSeqForFY(billNo: string, fy: string): number {
   const b = String(billNo || "").trim();
   const prefix = `${String(fy || "").trim()}/`;
@@ -355,66 +378,68 @@ export async function allocateNextBillSeq(fy: string): Promise<number> {
   const f = String(fy || "").trim();
   if (!f) throw new Error("FY missing");
 
-  await ensureBillCounterSheet();
-  const rows = await safeReadBillCounterRows();
+  return withBillCounterLock(f, async () => {
+    await ensureBillCounterSheet();
+    const rows = await safeReadBillCounterRows();
 
-  const { sheets, spreadsheetId } = getSheetsClient();
-  const now = new Date().toISOString();
+    const { sheets, spreadsheetId } = getSheetsClient();
+    const now = new Date().toISOString();
 
-  // find row for FY
-  let foundIx = -1;
-  for (let i = 0; i < rows.length; i++) {
-    if (String(rows[i]?.[0] ?? "").trim() === f) {
-      foundIx = i;
-      break;
+    // find row for FY
+    let foundIx = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i]?.[0] ?? "").trim() === f) {
+        foundIx = i;
+        break;
+      }
     }
-  }
 
-  if (foundIx === -1) {
-    // First time for FY: compute current max once (slow) and initialize.
-    const max = await computeMaxBillSeqForFY(f);
-    const allocate = Math.max(1, max + 1);
+    if (foundIx === -1) {
+      // First time for FY: compute current max once (slow) and initialize.
+      const max = await computeMaxBillSeqForFY(f);
+      const allocate = Math.max(1, max + 1);
+      const nextSeq = allocate + 1;
+
+      const appended = await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: BILL_COUNTER_APPEND_RANGE,
+        valueInputOption: "USER_ENTERED",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: [[f, nextSeq, now]] },
+      });
+
+      // Update cache (best-effort)
+      const rn = parseRowNumberFromA1Range(appended.data.updates?.updatedRange);
+      if (rn && _billCounterCache) {
+        _billCounterCache.rows.push([f, nextSeq, now]);
+        _billCounterCache.ts = Date.now();
+      } else {
+        _billCounterCache = null;
+      }
+
+      return allocate;
+    }
+
+    const row = rows[foundIx] || [];
+    const allocate = Math.max(1, Number(row[1] ?? 1) || 1);
     const nextSeq = allocate + 1;
+    const rowNumber = foundIx + 2; // + header
 
-    const appended = await sheets.spreadsheets.values.append({
+    await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: BILL_COUNTER_APPEND_RANGE,
+      range: a1(BILL_COUNTER_SHEET, `A${rowNumber}:C${rowNumber}`),
       valueInputOption: "USER_ENTERED",
-      insertDataOption: "INSERT_ROWS",
       requestBody: { values: [[f, nextSeq, now]] },
     });
 
-    // Update cache (best-effort)
-    const rn = parseRowNumberFromA1Range(appended.data.updates?.updatedRange);
-    if (rn && _billCounterCache) {
-      _billCounterCache.rows.push([f, nextSeq, now]);
+    // Update cache
+    if (_billCounterCache) {
+      _billCounterCache.rows[foundIx] = [f, nextSeq, now];
       _billCounterCache.ts = Date.now();
-    } else {
-      _billCounterCache = null;
     }
 
     return allocate;
-  }
-
-  const row = rows[foundIx] || [];
-  const allocate = Math.max(1, Number(row[1] ?? 1) || 1);
-  const nextSeq = allocate + 1;
-  const rowNumber = foundIx + 2; // + header
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: a1(BILL_COUNTER_SHEET, `A${rowNumber}:C${rowNumber}`),
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values: [[f, nextSeq, now]] },
   });
-
-  // Update cache
-  if (_billCounterCache) {
-    _billCounterCache.rows[foundIx] = [f, nextSeq, now];
-    _billCounterCache.ts = Date.now();
-  }
-
-  return allocate;
 }
 
 async function getInvoiceRowNumberFromIndex(key: string): Promise<number | null> {
@@ -1234,6 +1259,18 @@ export async function loadInvoiceRowsFromSheet(): Promise<any[][]> {
   } catch {
     return [];
   }
+}
+
+export async function countInvoicesByBillNo(billNo: string): Promise<number> {
+  const key = String(billNo || "").trim();
+  if (!key) return 0;
+
+  const rows = await readRows(a1(INVOICE_SHEET, "A2:A"));
+  let count = 0;
+  for (const r of rows) {
+    if (String(r?.[0] ?? "").trim() === key) count += 1;
+  }
+  return count;
 }
 
 /**
