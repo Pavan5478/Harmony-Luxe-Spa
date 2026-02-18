@@ -36,6 +36,32 @@ type ParsedExpense = {
   category: string;
 };
 
+type RawBill = {
+  finalizedAt?: string;
+  createdAt?: string;
+  billDate?: string;
+  status?: string;
+  totals?: {
+    grandTotal?: number | string;
+    total?: number | string;
+  };
+  grandTotal?: number | string;
+  customer?: {
+    name?: string;
+  };
+  customerName?: string;
+  paymentMode?: string;
+};
+
+type RawExpense = {
+  dateISO?: string;
+  DateISO?: string;
+  amount?: number | string;
+  Amount?: number | string;
+  category?: string;
+  Category?: string;
+};
+
 const IST_TZ = "Asia/Kolkata";
 
 function ymdInTz(d: Date, timeZone = IST_TZ) {
@@ -103,21 +129,17 @@ export default async function DashboardPage() {
   // ─────────────────────────────────────
   // Bills
   // ─────────────────────────────────────
-  const parsedBills: ParsedBill[] = (allBillsRaw as any[])
+  const parsedBills: ParsedBill[] = (allBillsRaw as RawBill[])
     .map((b) => {
       const rawDate = b.finalizedAt || b.createdAt || b.billDate;
       const dateISO = String(rawDate ?? "");
       const ts = Date.parse(dateISO);
       const status = (b.status || "DRAFT") as BillStatus;
 
-      const totals = (b.totals || {}) as any;
       const grandTotal =
-        Number((b as any).grandTotal ?? totals.grandTotal ?? totals.total ?? 0) || 0;
+        Number(b.grandTotal ?? b.totals?.grandTotal ?? b.totals?.total ?? 0) || 0;
 
-      const customerName =
-        (b.customer?.name as string | undefined) ||
-        (b.customerName as string | undefined) ||
-        "";
+      const customerName = b.customer?.name || b.customerName || "";
 
       const paymentMode = String(b.paymentMode || "").toUpperCase() || undefined;
 
@@ -169,12 +191,12 @@ export default async function DashboardPage() {
   // ─────────────────────────────────────
   // Expenses
   // ─────────────────────────────────────
-  const parsedExpenses: ParsedExpense[] = (allExpensesRaw as any[])
+  const parsedExpenses: ParsedExpense[] = (allExpensesRaw as RawExpense[])
     .map((e) => {
       const dateISO = String(e.dateISO ?? e.DateISO ?? "");
       const ts = Date.parse(dateISO);
       const amount = Number(e.amount ?? e.Amount ?? 0) || 0;
-      const category = (e.category ?? e.Category ?? "Misc") as string;
+      const category = String(e.category ?? e.Category ?? "Misc");
       return { ts, dateISO, date: new Date(dateISO), amount, category };
     })
     .filter((x) => Number.isFinite(x.ts));
@@ -325,6 +347,31 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-4 space-y-4 lg:space-y-5">
+        {/* <DashboardKpis
+          monthLabel={monthLabel}
+          todayLabel={todayLabel}
+          monthRevenue={monthRevenue}
+          todayRevenue={todayRevenue}
+          revenueChangePct={revenueChangePct}
+          projectedRevenue={projectedRevenue}
+          monthExpensesTotal={monthExpensesTotal}
+          todayExpensesTotal={todayExpensesTotal}
+          monthProfit={monthProfit}
+          todayProfit={todayProfit}
+          expenseRatio={expenseRatio}
+          avgBill={avgBill}
+          monthInvoiceCount={monthInvoiceCount}
+          todayCount={todayCount}
+          finalCount={finalCount}
+          draftCount={draftCount}
+          voidCount={voidCount}
+          activeCustomers={activeCustomers}
+          finalizationRate={finalizationRate}
+          totalInvoices={totalInvoices}
+          last7Revenue={last7Revenue}
+          links={links}
+        /> */}
+
         <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
           <div className="space-y-4 lg:col-span-8">
              <RevenueTrendCard last14={last14} maxDayTotal={maxDayTotal} total={last14Total} />

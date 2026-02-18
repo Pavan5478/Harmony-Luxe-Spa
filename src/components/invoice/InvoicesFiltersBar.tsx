@@ -109,10 +109,6 @@ function DateChipPicker({
   const [view, setView] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
 
   useEffect(() => {
-    setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
-  }, [selected]);
-
-  useEffect(() => {
     function onDown(e: MouseEvent) {
       if (!open) return;
       const t = e.target as Node | null;
@@ -175,7 +171,10 @@ function DateChipPicker({
     <div className="relative" ref={anchorRef}>
       <button
         type="button"
-        onClick={() => setOpenId(open ? null : id)}
+        onClick={() => {
+          if (!open) setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
+          setOpenId(open ? null : id);
+        }}
         className={[
           "inline-flex h-10 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm shadow-sm transition",
           "hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -323,10 +322,11 @@ export default function InvoicesFiltersBar(props: {
   initialFrom: string;
   initialTo: string;
   initialStatus: Status;
+  canCreateBill: boolean;
   canExport: boolean;
   count: number;
 }) {
-  const { initialQ, initialFrom, initialTo, initialStatus, canExport, count } = props;
+  const { initialQ, initialFrom, initialTo, initialStatus, canCreateBill, canExport, count } = props;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -339,9 +339,13 @@ export default function InvoicesFiltersBar(props: {
   const [openId, setOpenId] = useState<string | null>(null);
 
   // keep in sync when user navigates back/forward
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setQ(initialQ || ""), [initialQ]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setFrom(initialFrom || ""), [initialFrom]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setTo(initialTo || ""), [initialTo]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setStatus(initialStatus || "ALL"), [initialStatus]);
 
   function buildParams() {
@@ -434,13 +438,15 @@ export default function InvoicesFiltersBar(props: {
             </a>
           ) : null}
 
-          <Link
-  href="/billing"
-  prefetch={false}
-  className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold !text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:!text-slate-900 dark:hover:bg-slate-100"
->
-  + New bill
-</Link>
+          {canCreateBill ? (
+            <Link
+              href="/billing"
+              prefetch={false}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold !text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:!text-slate-900 dark:hover:bg-slate-100"
+            >
+              + New bill
+            </Link>
+          ) : null}
 
         </div>
       </div>

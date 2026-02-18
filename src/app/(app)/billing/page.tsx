@@ -344,6 +344,9 @@ export default function BillingPage() {
   const sp = useSearchParams();
   const editKey = sp.get("edit");
   const isEditing = !!editKey;
+  const prefillName = (sp.get("cname") || "").trim();
+  const prefillPhone = (sp.get("cphone") || "").trim();
+  const prefillEmail = (sp.get("cemail") || "").trim();
 
   const [items, setItems] = useState<Item[]>([]);
   const [recentItemIds, setRecentItemIds] = useState<string[]>([]);
@@ -374,6 +377,17 @@ export default function BillingPage() {
   const [initialStatus, setInitialStatus] = useState<"DRAFT" | "FINAL" | "VOID" | undefined>(
     undefined
   );
+
+  useEffect(() => {
+    if (editKey) return;
+    if (!prefillName && !prefillPhone && !prefillEmail) return;
+
+    setCustomer((prev) => ({
+      name: prev.name || prefillName,
+      phone: prev.phone || prefillPhone,
+      email: prev.email || prefillEmail,
+    }));
+  }, [editKey, prefillEmail, prefillName, prefillPhone]);
 
   useEffect(() => {
     let cancelled = false;

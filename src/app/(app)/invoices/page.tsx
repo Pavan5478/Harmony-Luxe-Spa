@@ -22,6 +22,7 @@ type Row = {
   dateISO: string;
   ts: number;
   eventTs?: number;
+  sortTs: number;
   customer: string;
   amount: number;
   status: RowStatus;
@@ -274,6 +275,7 @@ export default async function InvoicesListPage({
   const isAdmin = role === "ADMIN";
   const canExport = role === "ADMIN" || role === "ACCOUNTS";
   const canEdit = role !== "ACCOUNTS";
+  const canCreateBill = role === "ADMIN" || role === "CASHIER";
 
   const rowsRaw = await readRows("Invoices!A2:X");
 
@@ -290,6 +292,7 @@ export default async function InvoicesListPage({
       const stRaw = r?.[22];
       const st = normalizeStatus(stRaw, billNo);
       const eventTs = parseEventTsFromRaw(r?.[23], st);
+      const sortTs = Number.isFinite(eventTs) ? (eventTs as number) : ts;
 
       return {
         id: id || undefined,
@@ -298,6 +301,7 @@ export default async function InvoicesListPage({
         dateISO,
         ts,
         eventTs,
+        sortTs,
         customer: String(r?.[3] || ""),
         amount: parseMoney(r?.[15]),
         status: st,
@@ -314,7 +318,7 @@ export default async function InvoicesListPage({
       const hay = `${r.key} ${r.customer} ${r.cashier}`.toLowerCase();
       return hay.includes(q);
     })
-    .sort((a, b) => b.ts - a.ts);
+    .sort((a, b) => b.sortTs - a.sortTs || b.ts - a.ts);
 
   // Pagination slice
   const totalItems = filteredAll.length;
@@ -353,6 +357,7 @@ export default async function InvoicesListPage({
         initialFrom={sp.from || ""}
         initialTo={sp.to || ""}
         initialStatus={status || "ALL"}
+        canCreateBill={canCreateBill}
         canExport={canExport}
         count={filteredAll.length} // show total matching count, not just current page
       />
@@ -367,15 +372,14 @@ export default async function InvoicesListPage({
             <div className="min-w-0 overflow-hidden rounded-xl bg-background/40 ring-1 ring-border/60">
               <div className="divide-y divide-border/40">
                 {filtered.map((r) => {
-                  const dateObj = new Date(r.ts);
+                  const displayTs = Number.isFinite(r.eventTs as number)
+                    ? (r.eventTs as number)
+                    : r.ts;
+                  const hasEventTime = Number.isFinite(r.eventTs as number);
+                  const dateObj = new Date(displayTs);
                   const isValid = !Number.isNaN(dateObj.getTime());
                   const dateStr = isValid ? dtDate.format(dateObj) : "—";
-                  const hasEventTime = Number.isFinite(r.eventTs);
-                  const eventDateObj = hasEventTime ? new Date(r.eventTs as number) : null;
-                  const timeStr =
-                    eventDateObj && !Number.isNaN(eventDateObj.getTime())
-                      ? dtTime.format(eventDateObj)
-                      : "";
+                  const timeStr = hasEventTime && isValid ? dtTime.format(dateObj) : "";
 
                   const label = r.billNo || r.id || r.key;
                   const viewHref = `/invoices/${encodeURIComponent(r.key)}`;

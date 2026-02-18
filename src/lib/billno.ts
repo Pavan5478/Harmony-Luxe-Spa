@@ -45,7 +45,7 @@ export async function nextBillNo(): Promise<string> {
   } catch {
     // Fallback (migration/edge): scan bill numbers column.
     const colA = await readRows("Invoices!A2:A");
-    let maxSeq = 0;
+    let maxSeq = -1;
     for (const r of colA) {
       const billNo = String(r?.[0] || "").trim();
       if (!billNo.startsWith(prefix)) continue;

@@ -350,19 +350,19 @@ async function withBillCounterLock<T>(fy: string, task: () => Promise<T>): Promi
 function parseBillSeqForFY(billNo: string, fy: string): number {
   const b = String(billNo || "").trim();
   const prefix = `${String(fy || "").trim()}/`;
-  if (!b || !prefix || !b.startsWith(prefix)) return 0;
+  if (!b || !prefix || !b.startsWith(prefix)) return -1;
   const tail = b.slice(prefix.length);
   const n = parseInt(tail, 10);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? n : -1;
 }
 
 async function computeMaxBillSeqForFY(fy: string): Promise<number> {
   const f = String(fy || "").trim();
-  if (!f) return 0;
+  if (!f) return -1;
   // One-time slow path (migration only): scan billNo column to find max for FY.
   // We intentionally read only column A.
   const rows = await readRows(a1(INVOICE_SHEET, "A2:A"));
-  let max = 0;
+  let max = -1;
   for (const r of rows) {
     const seq = parseBillSeqForFY(String(r?.[0] ?? ""), f);
     if (seq > max) max = seq;
@@ -397,7 +397,7 @@ export async function allocateNextBillSeq(fy: string): Promise<number> {
     if (foundIx === -1) {
       // First time for FY: compute current max once (slow) and initialize.
       const max = await computeMaxBillSeqForFY(f);
-      const allocate = Math.max(1, max + 1);
+      const allocate = Math.max(0, max + 1);
       const nextSeq = allocate + 1;
 
       const appended = await sheets.spreadsheets.values.append({
@@ -421,7 +421,8 @@ export async function allocateNextBillSeq(fy: string): Promise<number> {
     }
 
     const row = rows[foundIx] || [];
-    const allocate = Math.max(1, Number(row[1] ?? 1) || 1);
+    const allocateRaw = Number(row[1] ?? 0);
+    const allocate = Number.isFinite(allocateRaw) ? Math.max(0, allocateRaw) : 0;
     const nextSeq = allocate + 1;
     const rowNumber = foundIx + 2; // + header
 
