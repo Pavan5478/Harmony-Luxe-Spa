@@ -21,6 +21,7 @@ type Row = {
   key: string;
   dateISO: string;
   ts: number;
+  eventTs?: number;
   customer: string;
   amount: number;
   status: RowStatus;
@@ -80,6 +81,23 @@ function normalizeStatus(raw: unknown, billNo?: string): RowStatus {
   if (s === "FINAL" || s === "DRAFT" || s === "VOID") return s;
   // fallback inference
   return billNo ? "FINAL" : "DRAFT";
+}
+
+function parseEventTsFromRaw(raw: unknown, status: RowStatus): number | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw) as { createdAt?: string; finalizedAt?: string };
+    const preferred =
+      status === "FINAL"
+        ? parsed.finalizedAt || parsed.createdAt
+        : parsed.createdAt || parsed.finalizedAt;
+    if (!preferred) return undefined;
+    const t = Date.parse(preferred);
+    return Number.isFinite(t) ? t : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function StatusBadge({ s }: { s: RowStatus }) {
@@ -257,10 +275,10 @@ export default async function InvoicesListPage({
   const canExport = role === "ADMIN" || role === "ACCOUNTS";
   const canEdit = role !== "ACCOUNTS";
 
-  const rowsRaw = await readRows("Invoices!A2:W");
+  const rowsRaw = await readRows("Invoices!A2:X");
 
   const rows: Row[] = rowsRaw
-    .map((r: any[]) => {
+    .map((r: unknown[]) => {
       const billNo = String(r?.[0] || "").trim();
       const id = String(r?.[1] || "").trim();
       const key = billNo || id;
@@ -271,6 +289,7 @@ export default async function InvoicesListPage({
 
       const stRaw = r?.[22];
       const st = normalizeStatus(stRaw, billNo);
+      const eventTs = parseEventTsFromRaw(r?.[23], st);
 
       return {
         id: id || undefined,
@@ -278,6 +297,7 @@ export default async function InvoicesListPage({
         key,
         dateISO,
         ts,
+        eventTs,
         customer: String(r?.[3] || ""),
         amount: parseMoney(r?.[15]),
         status: st,
@@ -322,7 +342,7 @@ export default async function InvoicesListPage({
     q: sp.q || "",
     from: sp.from || "",
     to: sp.to || "",
-    status: (status || "ALL") as any,
+    status: status || "ALL",
     // page will be added by Pagination
   };
 
@@ -332,7 +352,7 @@ export default async function InvoicesListPage({
         initialQ={sp.q || ""}
         initialFrom={sp.from || ""}
         initialTo={sp.to || ""}
-        initialStatus={(status || "ALL") as any}
+        initialStatus={status || "ALL"}
         canExport={canExport}
         count={filteredAll.length} // show total matching count, not just current page
       />
@@ -350,7 +370,12 @@ export default async function InvoicesListPage({
                   const dateObj = new Date(r.ts);
                   const isValid = !Number.isNaN(dateObj.getTime());
                   const dateStr = isValid ? dtDate.format(dateObj) : "—";
-                  const timeStr = isValid ? dtTime.format(dateObj) : "";
+                  const hasEventTime = Number.isFinite(r.eventTs);
+                  const eventDateObj = hasEventTime ? new Date(r.eventTs as number) : null;
+                  const timeStr =
+                    eventDateObj && !Number.isNaN(eventDateObj.getTime())
+                      ? dtTime.format(eventDateObj)
+                      : "";
 
                   const label = r.billNo || r.id || r.key;
                   const viewHref = `/invoices/${encodeURIComponent(r.key)}`;
